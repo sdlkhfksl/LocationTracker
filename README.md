@@ -11,7 +11,7 @@
 [![手机界面](https://img.shields.io/badge/手机界面-单面板设计-brightgreen.svg)](https://haoxiang.eu.org/ui/MOBILE_UI_PREVIEW)
 [![平板界面](https://img.shields.io/badge/平板界面-大屏优化-blue.svg)](https://haoxiang.eu.org/ui/TABLET_UI_PREVIEW)
 
-> 📱 **智能位置上报应用** - 通过HTTP Webhook将安卓设备位置数据发送到Home Assistant或其他服务器
+> 📱 **智能位置上报应用** - 通过 HTTP Webhook 将安卓设备位置推送到 Home Assistant（推荐 `ha_loca_device`）
 
 ## 🚨 重要提醒
 
@@ -31,18 +31,19 @@
 1. 下载 [APK文件](./app/build/outputs/apk/release/)
 2. 安装到Android设备
 3. 授予必要权限
-4. 配置Webhook URL（支持 http/https，格式校验，不能为空）
-5. 配置上报周期（10~10800秒，不能为空，超范围校验）
+4. 配置 HA 上报地址（填 HA 根地址，如 `https://ha.example.com`，App 自动生成 Webhook ID 并拼 `/api/webhook/<id>`）
+5. 配置本地初始间隔（10~10800秒，默认60；上报成功后以 HA `ha_loca_device` 配置为准并自动同步）
 6. 点击"开始定位"即可使用
 
 ### ⚡ 核心功能
 - 📍 **实时定位**: GPS/网络定位，精确位置上报
+- 🔗 **HA 对接**: 填根地址自动生成 Webhook ID，配合 `ha_loca_device`
+- ⏱️ **间隔同步**: 上报成功后按 HA 返回的 `update_interval` 自动同步
 - 🔄 **数据去重**: 避免重复上报相同位置数据
 - 🔋 **低电量保护**: 电量低于10%时自动暂停上报
-- 🌙 **后台保活**: 开机自启动，服务自动重启
+- 🌙 **后台保活**: 开机自启动，服务自动重启；通知仅保活、不频繁刷新
 - 🎨 **透明状态栏**: 支持Android 4.4+透明状态栏
 - 🛡️ **全局异常捕获**: 崩溃自动记录日志并友好提示
-- 📝 **输入校验**: Webhook URL格式和上报周期严格校验
 - 🖥️ **多分辨率适配**: 支持不同屏幕尺寸
 - 🔧 **设备优化指导**: 内置各品牌设备优化设置指导
 - 🔒 **SQL注入防护**: 使用参数化查询防止SQL注入
@@ -55,7 +56,7 @@
 ### 📱 手机端特性
 - **单面板设计**: 底部TAB切换，界面简洁统一
 - **状态监控**: 实时显示连接状态、定位状态、电池电量、上报次数
-- **配置面板**: Webhook URL配置、上报间隔设置、通知开关
+- **配置面板**: HA 上报地址、本地初始间隔、通知开关
 - **运行日志**: 实时显示应用运行状态和上报记录
 
 ### 📟 平板端特性
@@ -69,15 +70,15 @@
 ### 首次使用
 1. **安装应用**: 下载并安装APK文件
 2. **授予权限**: 允许定位、网络、自启动等权限
-3. **配置参数**: 在配置面板设置Webhook URL和上报间隔
+3. **配置参数**: 填 HA 根地址与本地初始间隔；记下自动生成的 Webhook ID，在 HA 添加 `ha_loca_device`
 4. **启动服务**: 点击"开始定位"按钮启动位置上报
 5. **监控状态**: 切换到监控面板查看运行状态和日志
 
 ### 界面操作
 - **📊 监控面板**: 查看连接状态、定位状态、电池电量、上报次数
-- **⚙️ 配置面板**: 设置Webhook URL、上报间隔、通知开关
+- **⚙️ 配置面板**: 设置 HA 上报地址、本地初始间隔、通知开关
 - **📱 底部导航**: 监控和配置面板切换
-- **��️ 日志管理**: 点击"🛠️ 日志"查看崩溃日志
+- **🛠️ 日志管理**: 点击"🛠️ 日志"查看崩溃日志
 - **🔧 优化设置**: 点击"优化设置"获取设备优化建议
 
 ### 日常使用
@@ -85,13 +86,13 @@
 - **后台运行**: 服务在后台持续运行，无需手动干预
 - **状态监控**: 通过状态面板查看连接状态和上报次数
 - **日志查看**: 查看详细运行日志，便于问题排查
-- **通知监控**: 通过通知栏查看当前上报时间和状态
+- **通知保活**: 通知仅用于前台保活，不频繁刷新内容
 
 ### 故障排除
 1. **服务无法启动**: 检查GPS是否开启，权限是否授予
-2. **数据上报失败**: 检查网络连接，Webhook URL是否正确
+2. **数据上报失败**: 检查网络与 HA 公网地址；确认 Webhook ID 与 `ha_loca_device` 一致
 3. **后台被杀死**: 检查设备优化设置，确保应用不被限制
-4. **电量消耗过快**: 适当增加上报间隔，或开启低电量保护
+4. **电量消耗过快**: 在 HA 集成中加大上报间隔，或开启低电量保护
 5. **主题兼容性问题**: 应用已内置智能主题适配，如仍有问题请查看崩溃日志
 
 ## 📋 权限说明
@@ -129,7 +130,7 @@
 ✅ **API级别兼容性**: 修复所有API级别兼容性问题
 
 ### 安全建议
-- 🔐 建议使用HTTPS Webhook URL
+- 🔐 建议使用 HTTPS 的 HA 公网地址
 - 🔐 定期更新应用版本
 - 🔐 在可信网络环境下使用
 - 🔐 定期检查上报数据的准确性
@@ -137,15 +138,13 @@
 ## ⚙️ 配置说明
 
 ### 基本配置
-1. **Webhook URL**: 必须以 http/https 开头，不能为空，输入时有格式校验
-2. **上报间隔**: 10~10800秒，不能为空，超范围无效
-3. **通知开关**: 控制前台通知显示，保持应用在后台运行
+1. **HA 上报地址**: 填 HA 根地址（http/https），App 自动生成 Webhook ID 并拼成完整 `/api/webhook/<id>`
+2. **本地初始间隔**: 10~10800秒，缺省/超范围回退为60；成功上报后以 HA 返回的 `update_interval` 为准
+3. **通知开关**: 前台保活通知（静默、不频繁刷新）
 
 ### 数据格式
 
-应用会根据不同的上报场景发送不同格式的数据：
-
-#### 标准位置上报格式
+#### 标准位置上报
 ```json
 {
   "latitude": 37.7749,
@@ -162,7 +161,7 @@
 }
 ```
 
-#### 立即上报格式（包含额外标记）
+#### 立即上报（含标记）
 ```json
 {
   "latitude": 37.7749,
@@ -180,16 +179,7 @@
 }
 ```
 
-#### WorkManager简化格式（仅基础字段）
-```json
-{
-  "latitude": 37.7749,
-  "longitude": -122.4194,
-  "altitude": 100.5,
-  "accuracy": 5.0,
-  "timestamp": 1640995200000
-}
-```
+HA 成功响应示例：`{"ok":true,"update_interval":60}`
 
 ### 字段说明
 
@@ -198,7 +188,7 @@
 | `latitude` | number | 纬度 | ✅ |
 | `longitude` | number | 经度 | ✅ |
 | `altitude` | number | 海拔高度（米） | ⚠️ |
-| `gps_accuracy` / `accuracy` | number | GPS精度（米） | ⚠️ |
+| `gps_accuracy` | number | GPS精度（米） | ⚠️ |
 | `battery` | number | 电池电量百分比 | ⚠️ |
 | `speed` | number | 移动速度（米/秒） | ⚠️ |
 | `bearing` | number | 方向角度（0-360度） | ⚠️ |
@@ -244,50 +234,37 @@
 
 ## 🏠 Home Assistant 集成
 
-> 💡 **推荐方案**: 配合 [TRSDM Dynamic Device Tracker](https://github.com/Dekadinious/trsdm_custom_device_tracker_for_home_assistant) 插件使用，提供更灵活的设备和属性管理
+> 推荐使用本仓库自带的 `ha_loca_device` 集成（HTTP webhook，一设备一入口）。
 
-### 方案一：TRSDM Dynamic Device Tracker (推荐)
+### 方案一：ha_loca_device（推荐）
 
-#### 安装步骤
-1. 确保已安装 [HACS](https://hacs.xyz/) (Home Assistant Community Store)
-2. 在Home Assistant中，进入 HACS > Integrations
-3. 点击"+"按钮，搜索"TRSDM Dynamic Device Tracker"
-4. 点击安装 TRSDM Dynamic Device Tracker 集成
-5. 重启 Home Assistant
+#### 安装
+1. 将仓库中的 `ha_loca_device` 目录复制到 Home Assistant 的 `custom_components/ha_loca_device`
+2. 或在 HACS → 自定义存储库中添加本仓库，类别选「集成」后下载 `ha_loca_device`
+3. 重启 Home Assistant
 
-#### 配置步骤
-1. 在Home Assistant中，进入 Settings > Devices & Services
-2. 点击"+"按钮添加新集成
-3. 搜索"TRSDM Dynamic Device Tracker"并选择
-4. 按照提示设置你的第一个设备追踪器：
-   - 给追踪器起个名字（例如："我的手机"）
-   - 集成会自动生成唯一的webhook URL
+#### 配置
+1. App 填 HA 根地址并启动，记下自动生成的 Webhook ID
+2. HA 添加 `ha_loca_device`：设备名、Webhook ID、上报间隔
+3. App 向公网 Webhook 推送；间隔以 HA 配置为准（上报成功后自动同步）
 
-#### 使用方式
-1. **配置Webhook URL**: 在APP的配置面板中填写Home Assistant的webhook URL
-2. **设置上报周期**: 配置位置上报的时间间隔（10-10800秒）
-3. **启动服务**: 点击"开始定位"按钮启动位置上报服务
-4. **自动上报**: APP会自动按照配置的周期向webhook URL发送位置数据
+#### App 对接
+1. 上报地址：`https://your-ha`（App 自动拼 `/api/webhook/<id>`）
+2. 手机只要能上网访问 HA 即可（蜂窝/外网均可）
+3. 通知仅用于保活，不频繁刷新
 
-**示例配置**:
-- Webhook URL: `https://your-home-assistant-url/api/webhook/your-webhook-id`
-- 上报周期: `60`秒
-- 通知开关: `开启`（保持应用在后台运行）
+**示例**:
+- App：`https://ha.example.com` → `https://ha.example.com/api/webhook/<自动id>`
+- HA 间隔：60 秒（可在集成配置中修改）
 
-**数据格式**: APP会自动发送包含位置信息的JSON数据，只需要`latitude`和`longitude`字段是必需的，其他字段会根据设备能力自动添加。
+**JSON 字段**: `latitude` / `longitude` 必填；可选 `gps_accuracy`、`battery`、`altitude`、`speed`、`bearing`、`timestamp`、`provider`、`screen_off`、`power_save_mode`、`immediate_report`
 
-> ⚠️ **重要提醒**: 上报地址必须使用域名或公网IP地址，不能使用内网IP（如192.168.x.x、10.x.x.x等）。因为手机设备需要通过互联网访问Home Assistant服务器，内网IP地址在手机网络环境下无法访问。
+> 上报地址须为公网域名或公网 IP，不能使用内网 IP。
 
-#### 标准属性
-- 距离家的距离（米和英里）
-- 相对于家的方向（towards, away_from, stationary）
-- 从家的方位角（N, NE, E, SE, S, SW, W, NW）
-- 最后更新时间戳
-- 最后重要位置变化时间（10米累积）
+详见 [`ha_loca_device/README.md`](./ha_loca_device/README.md)。
 
-### 方案二：原生Webhook集成
+### 方案二：原生 Webhook 自动化（备选）
 
-#### 自动化配置
 ```yaml
 automation:
   - alias: "Location Update"
@@ -298,45 +275,15 @@ automation:
       - service: device_tracker.see
         data:
           dev_id: myphone
-          location_name: home
           latitude: "{{ trigger.json.latitude }}"
           longitude: "{{ trigger.json.longitude }}"
           gps_accuracy: "{{ trigger.json.gps_accuracy }}"
           battery: "{{ trigger.json.battery }}"
 ```
 
-#### 设备追踪器配置
-```yaml
-device_tracker:
-  - platform: webhook
-    webhook_id: your_webhook_id
-    name: "我的手机"
-    icon: mdi:cellphone
-```
+### 方案三：ha_icloud_cn（Apple 设备，可选）
 
-### 方案对比
-
-| 特性 | TRSDM Dynamic Device Tracker | 原生Webhook集成 |
-|------|------------------------------|-----------------|
-| **安装难度** | ⭐⭐⭐ 需要HACS | ⭐⭐ 原生支持 |
-| **配置灵活性** | ⭐⭐⭐⭐⭐ 高度可定制 | ⭐⭐ 基础功能 |
-| **属性管理** | ⭐⭐⭐⭐⭐ 动态属性 | ⭐⭐ 固定属性 |
-| **设备数量** | ⭐⭐⭐⭐⭐ 无限制 | ⭐⭐⭐ 有限制 |
-| **界面友好** | ⭐⭐⭐⭐⭐ 图形界面 | ⭐⭐ 代码配置 |
-| **维护便利** | ⭐⭐⭐⭐⭐ 易于管理 | ⭐⭐ 需要手动维护 |
-
-### 推荐使用场景
-
-#### TRSDM Dynamic Device Tracker 适合：
-- 🏠 **家庭用户**: 需要图形界面配置
-- 🔧 **开发者**: 需要灵活的属性和设备管理
-- 📱 **多设备**: 需要追踪多个设备
-- 🎯 **定制化**: 需要自定义属性和功能
-
-#### 原生Webhook集成 适合：
-- 🚀 **快速部署**: 简单的一对一设备追踪
-- 📚 **学习目的**: 了解Home Assistant基础功能
-- 🔒 **安全考虑**: 不想安装第三方插件
+大陆 iCloud（`icloud.com.cn`）查找设备位置/电量，与本 App 无关。将 `ha_icloud_cn` 复制到 `custom_components` 后重启 HA。详见 [`ha_icloud_cn/README.md`](./ha_icloud_cn/README.md)。
 
 ### 开发环境
 - Android Studio 4.0+
@@ -427,7 +374,7 @@ WEBHOOK_URL=你的webhook地址
 1. 下载release中的APK文件
 2. 在Android设备上安装
 3. 授予必要权限
-4. 配置Webhook URL和上报间隔
+4. 配置 HA 上报地址和本地初始间隔
 
 #### 方式二: 源码编译
 1. 克隆项目代码
@@ -561,6 +508,13 @@ WEBHOOK_URL=你的webhook地址
 **注意**: 使用本应用时请遵守当地法律法规，确保在合法范围内使用位置服务。
 
 ## 📝 更新日志
+
+### 当前改动（对接 ha_loca_device）
+- App 填 HA 根地址，自动生成 Webhook ID 并拼 `/api/webhook/<id>`
+- 上报间隔以 HA `ha_loca_device` 为准，响应 `update_interval` 自动同步
+- 通知改为保活静默通知，不频繁刷新电量/坐标
+- 定位改为稀疏采样 + 定时上报，息屏不再重绑 GPS
+- 新增仓库集成：`ha_loca_device`（Android 推送）、`ha_icloud_cn`（大陆 iCloud）
 
 ### v2.1.6（2024-07-19）
 - 定位上报策略优化：白天无论静止/运动/息屏都持续上报，夜间静止暂停上报

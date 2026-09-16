@@ -87,6 +87,9 @@ public class ltmService extends Service {
     private BroadcastReceiver immediateReportReceiver = null;
 
     private static ltmService instance;
+    private Location lastLocation = null;
+    private LocationHttpServer httpServer = null;
+    private String deviceToken = "";
 
     public ltmService() {
     }
@@ -96,35 +99,15 @@ public class ltmService extends Service {
      */
     private void acquireWakeLock() {
         try {
-            PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
-            // 使用兼容的方法，避免过时API警告
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-                // Android 5.0+ 使用新的WakeLock方法
-                if (isScreenOff) {
-                    // 屏幕熄灭时使用更强的WakeLock
-                    wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK | PowerManager.ON_AFTER_RELEASE, "LocationTracker::FullWakeLock");
-                    sendLogBroadcast("📱 屏幕熄灭，使用PARTIAL_WAKE_LOCK增强保活", "INFO");
-                } else {
-                    // 屏幕点亮时使用普通WakeLock
-                    wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK | PowerManager.ON_AFTER_RELEASE, "LocationTracker::WakeLock");
-                    sendLogBroadcast("📱 屏幕点亮，使用PARTIAL_WAKE_LOCK", "INFO");
-                }
-            } else {
-                // Android 4.0-4.4 使用旧方法
-                if (isScreenOff) {
-                    wakeLock = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP | PowerManager.ON_AFTER_RELEASE, "LocationTracker::FullWakeLock");
-                    sendLogBroadcast("📱 屏幕熄灭，使用FULL_WAKE_LOCK增强保活", "INFO");
-                } else {
-                    wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK | PowerManager.ON_AFTER_RELEASE, "LocationTracker::WakeLock");
-                    sendLogBroadcast("📱 屏幕点亮，使用PARTIAL_WAKE_LOCK", "INFO");
-                }
+            if (wakeLock != null && wakeLock.isHeld()) {
+                return;
             }
+            PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
+            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "LocationTracker::WakeLock");
+            wakeLock.setReferenceCounted(false);
             wakeLock.acquire();
-            sendLogBroadcast("✅ 已获取增强WakeLock，确保后台运行", "SUCCESS");
         } catch (Exception e) {
             Log.e(TAG, "获取WakeLock失败", e);
-            LocationTrackerApplication.logError("获取WakeLock失败", e);
-            sendLogBroadcast("获取WakeLock失败: " + e.getMessage(), "ERROR");
         }
     }
 
@@ -203,23 +186,16 @@ public class ltmService extends Service {
                             }
                             
                             if (configChanged) {
-                                sendLogBroadcast("检测到配置变更，重新启动定位服务", "INFO");
-                                
-                                // 更新配置
                                 HOST = newHost;
                                 time = newTime;
                                 notification_enable = newNotification;
-                                
-                                // 同步mode变量，确保一致性
                                 mode = newTime;
-                                
-                                // 重新启动定位服务
                                 if (locationManager != null && locationListener != null) {
                                     locationManager.removeUpdates(locationListener);
                                 }
-                                
-                                // 重新启动定位
                                 startLocationUpdates();
+                                startReportTimer();
+                                maybeReportLocation();
                             }
                         }
                     }
@@ -313,58 +289,7 @@ public class ltmService extends Service {
      * 根据屏幕状态调整定位更新间隔
      */
     private void adjustLocationUpdatesForScreenState() {
-        try {
-            if (locationManager != null && locationListener != null) {
-                // 先移除当前的定位监听
-                locationManager.removeUpdates(locationListener);
-                
-                // 重新启动定位，使用新的间隔
-                String providerToUse = null;
-                // 屏幕熄灭时强制使用GPS定位，因为GPS在省电模式下更新频率更稳定
-                if (isScreenOff) {
-                    if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                        providerToUse = LocationManager.GPS_PROVIDER;
-                        sendLogBroadcast("📱 屏幕熄灭，强制使用GPS定位", "INFO");
-                    } else if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                        providerToUse = LocationManager.NETWORK_PROVIDER;
-                        sendLogBroadcast("📱 屏幕熄灭，GPS不可用，使用网络定位", "INFO");
-                    } else if (locationManager.isProviderEnabled(LocationManager.PASSIVE_PROVIDER)) {
-                        providerToUse = LocationManager.PASSIVE_PROVIDER;
-                        sendLogBroadcast("📱 屏幕熄灭，使用被动定位", "INFO");
-                    }
-                } else {
-                    // 屏幕点亮时按正常优先级选择
-                    if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
-                        providerToUse = LocationManager.GPS_PROVIDER;
-                    } else if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                        providerToUse = LocationManager.NETWORK_PROVIDER;
-                    } else if (locationManager.isProviderEnabled(LocationManager.PASSIVE_PROVIDER)) {
-                        providerToUse = LocationManager.PASSIVE_PROVIDER;
-                    }
-                }
-                
-                if (providerToUse != null) {
-                    // 屏幕熄灭时使用配置间隔的1/2来对抗系统限制
-                    long updateInterval;
-                    if (isScreenOff) {
-                        updateInterval = (time * 1000) / 2; // 屏幕熄灭时使用配置间隔的1/2
-                        sendLogBroadcast("📱 屏幕熄灭，使用1/2间隔定位: " + (updateInterval/1000) + "秒", "INFO");
-                    } else {
-                        updateInterval = time * 1000; // 正常间隔
-                        sendLogBroadcast("📱 屏幕点亮，使用正常间隔定位: " + (updateInterval/1000) + "秒", "INFO");
-                    }
-                    
-                    // 使用兼容的定位请求方法
-                    requestLocationUpdatesCompat(providerToUse, updateInterval, 0, locationListener);
-                        sendLogBroadcast("✅ 定位服务已重新启动，间隔: " + (updateInterval/1000) + "秒", "SUCCESS");
-                } else {
-                    sendLogBroadcast("❌ 没有可用的定位提供者", "ERROR");
-                }
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "调整定位间隔失败", e);
-            sendLogBroadcast("调整定位间隔失败: " + e.getMessage(), "ERROR");
-        }
+        // 省电：屏幕亮灭不重绑 GPS，保持被动/稀疏监听即可
     }
 
     private void init() {
@@ -413,7 +338,7 @@ public class ltmService extends Service {
                         return;
                 }
                 
-                    sendLogBroadcast("配置加载成功: URL=" + HOST + ", 间隔=" + time + "秒", "SUCCESS");
+                    sendLogBroadcast("配置加载成功: HOST已设置, 间隔=" + time + "秒", "SUCCESS");
                 } else {
                     sendLogBroadcast("数据库中没有找到配置信息", "ERROR");
                     return;
@@ -435,10 +360,8 @@ public class ltmService extends Service {
                 sendLogBroadcast("Webhook URL为空，无法启动服务", "ERROR");
                 return;
             }
-            
             if (time < 10 || time > 10800) {
-                sendLogBroadcast("时间间隔配置无效，必须在10-10800秒之间", "ERROR");
-                return;
+                time = 60;
             }
             
             // 初始化定位监听器
@@ -447,49 +370,164 @@ public class ltmService extends Service {
                 @Override
                 public void onLocationChanged(Location location) {
                     if (location != null) {
-                            // 处理位置变化
                             handleLocationUpdate(location);
                     }
                 }
 
                 @Override
                 public void onStatusChanged(String provider, int status, Bundle extras) {
-                        String statusText = "";
-                    switch (status) {
-                        case LocationProvider.AVAILABLE:
-                            statusText = "可用";
-                            break;
-                        case LocationProvider.TEMPORARILY_UNAVAILABLE:
-                            statusText = "暂时不可用";
-                            break;
-                        case LocationProvider.OUT_OF_SERVICE:
-                                statusText = "服务外";
-                            break;
-                    }
-                        sendLogBroadcast("定位状态变化: " + provider + " - " + statusText, "INFO");
                 }
 
                 @Override
                 public void onProviderEnabled(String provider) {
-                    sendLogBroadcast("定位提供者启用: " + provider, "SUCCESS");
                 }
 
                 @Override
                 public void onProviderDisabled(String provider) {
-                        sendLogBroadcast("定位提供者禁用: " + provider, "WARNING");
-                        // 尝试切换到备用定位提供者
                     trySwitchToBackupProvider(provider);
                 }
             };
             }
             
-            // 启动定位服务
+            startReportTimer();
+            maybeReportLocation();
             startLocationUpdates();
             
         } catch (Exception e) {
             Log.e(TAG, "初始化服务失败", e);
             LocationTrackerApplication.logError("初始化服务失败", e);
             sendLogBroadcast("初始化服务失败: " + e.getMessage(), "ERROR");
+        }
+    }
+
+    private void startReportTimer() {
+        keepAliveHandler.removeCallbacks(reportRunnable);
+        long delay = Math.max(10, time) * 1000L;
+        keepAliveHandler.postDelayed(reportRunnable, delay);
+    }
+
+    private final Runnable reportRunnable = new Runnable() {
+        @Override
+        public void run() {
+            maybeReportLocation();
+            startReportTimer();
+        }
+    };
+
+    private void maybeReportLocation() {
+        try {
+            if (isLowBattery) {
+                return;
+            }
+            if (HOST == null || HOST.trim().isEmpty()) {
+                return;
+            }
+            JSONObject json = buildCurrentLocationJson();
+            if (json == null) {
+                return;
+            }
+            sendDataToWebhookWithNotification(json.toString(), lastLocation);
+        } catch (Exception e) {
+            Log.e(TAG, "maybeReportLocation failed", e);
+        }
+    }
+
+    private JSONObject buildCurrentLocationJson() {
+        Location location = pickBestCachedLocation();
+        if (location == null) {
+            return null;
+        }
+        try {
+            JSONObject jsonObject = new JSONObject();
+            jsonObject.put("latitude", location.getLatitude());
+            jsonObject.put("longitude", location.getLongitude());
+            jsonObject.put("altitude", location.getAltitude());
+            jsonObject.put("gps_accuracy", location.getAccuracy());
+            jsonObject.put("battery", getBatteryLevel());
+            jsonObject.put("speed", location.getSpeed());
+            jsonObject.put("bearing", location.getBearing());
+            jsonObject.put("timestamp", location.getTime() > 0 ? location.getTime() : System.currentTimeMillis());
+            jsonObject.put("provider", location.getProvider());
+            jsonObject.put("screen_off", isScreenOff);
+            jsonObject.put("power_save_mode", isPowerSaveMode());
+            return jsonObject;
+        } catch (Exception e) {
+            Log.e(TAG, "buildCurrentLocationJson failed", e);
+            return null;
+        }
+    }
+
+    private Location pickBestCachedLocation() {
+        Location best = lastLocation;
+        if (locationManager == null) {
+            return best;
+        }
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return best;
+        }
+        try {
+            Location[] candidates = new Location[]{
+                    best,
+                    locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER),
+                    locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER),
+                    locationManager.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER)
+            };
+            for (Location candidate : candidates) {
+                if (candidate == null) {
+                    continue;
+                }
+                if (best == null || candidate.getTime() > best.getTime()) {
+                    best = candidate;
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "pickBestCachedLocation failed", e);
+        }
+        if (best != null) {
+            lastLocation = best;
+        }
+        return best;
+    }
+
+    private void requestOneShotRefreshAsync() {
+        if (locationManager == null || isLowBattery) {
+            return;
+        }
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        try {
+            String provider = null;
+            if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                provider = LocationManager.NETWORK_PROVIDER;
+            } else if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                provider = LocationManager.GPS_PROVIDER;
+            }
+            if (provider == null) {
+                return;
+            }
+            locationManager.requestSingleUpdate(provider, new LocationListener() {
+                @Override
+                public void onLocationChanged(Location location) {
+                    if (location != null) {
+                        lastLocation = location;
+                    }
+                }
+
+                @Override
+                public void onStatusChanged(String provider, int status, Bundle extras) {
+                }
+
+                @Override
+                public void onProviderEnabled(String provider) {
+                }
+
+                @Override
+                public void onProviderDisabled(String provider) {
+                }
+            }, null);
+        } catch (Exception e) {
+            Log.e(TAG, "requestOneShotRefreshAsync failed", e);
         }
     }
 
@@ -544,14 +582,8 @@ public class ltmService extends Service {
                 String action = intent.getAction();
                 if (Intent.ACTION_SCREEN_OFF.equals(action)) {
                     isScreenOff = true;
-                    sendLogBroadcast("屏幕已熄灭，切换到省电模式", "INFO");
-                    // 重新调整定位间隔
-                    adjustLocationUpdatesForScreenState();
                 } else if (Intent.ACTION_SCREEN_ON.equals(action)) {
                     isScreenOff = false;
-                    sendLogBroadcast("屏幕已点亮，恢复正常模式", "INFO");
-                    // 重新调整定位间隔
-                    adjustLocationUpdatesForScreenState();
                 }
             }
         }, screenFilter);
@@ -605,6 +637,11 @@ public class ltmService extends Service {
         // 停止定位服务
         if (locationManager != null && locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
             locationManager.removeUpdates(locationListener);
+        }
+
+        if (httpServer != null) {
+            httpServer.stop();
+            httpServer = null;
         }
         
         // 销毁定位客户端
@@ -733,143 +770,133 @@ public class ltmService extends Service {
                     if (reportSuccess) {
                         reportCount++;
                         isConnected = true;
-                        sendLogBroadcast("[数据上报]上报数据成功 #" + reportCount, "SUCCESS");
-                        
-                        // 数据上报成功后，更新通知
-                        updateNotificationContent(location);
                     } else {
                         isConnected = false;
-                        sendLogBroadcast("[数据上报]上报数据失败，网络连接失败", "WARNING");
+                        sendLogBroadcast("[数据上报]上报失败", "WARNING");
                     }
                     
-                    // 无论成功失败都更新状态
                     updateStatus();
                     
                 } catch (Exception e) {
                     Log.e(TAG, "发送数据到Webhook时发生异常", e);
                     isConnected = false;
-                    sendLogBroadcast("发送数据异常: " + e.getMessage(), "ERROR");
                     updateStatus();
                 }
             }
         }).start();
+    }
+
+    private void applyIntervalFromResponse(String responseBody) {
+        try {
+            if (responseBody == null || responseBody.trim().isEmpty()) {
+                return;
+            }
+            JSONObject obj = new JSONObject(responseBody);
+            if (!obj.has("update_interval")) {
+                return;
+            }
+            int newInterval = obj.optInt("update_interval", time);
+            if (newInterval < 10 || newInterval > 10800) {
+                return;
+            }
+            if (newInterval != time) {
+                time = newInterval;
+                mode = newInterval;
+                startReportTimer();
+                sendLogBroadcast("已同步 HA 上报间隔: " + newInterval + "秒", "SUCCESS");
+            }
+        } catch (Exception e) {
+            Log.d(TAG, "parse update_interval skipped", e);
+        }
     }
     
     /**
      * 执行单次Webhook请求，包含重试机制
      */
     private boolean performSingleWebhookRequest(String data, String requestType, int maxRetries) {
-        // 添加重试机制
         int retryCount = 0;
         boolean success = false;
-        
+
         while (retryCount < maxRetries && !success) {
             try {
-        OkHttpClient client = new OkHttpClient.Builder()
-                .connectTimeout(10, TimeUnit.SECONDS)
-                .writeTimeout(10, TimeUnit.SECONDS)
-                .readTimeout(30, TimeUnit.SECONDS)
-                        .retryOnConnectionFailure(true) // 启用连接失败重试
-                .build();
+                OkHttpClient client = new OkHttpClient.Builder()
+                        .connectTimeout(10, TimeUnit.SECONDS)
+                        .writeTimeout(10, TimeUnit.SECONDS)
+                        .readTimeout(30, TimeUnit.SECONDS)
+                        .retryOnConnectionFailure(true)
+                        .build();
 
-        MediaType mediaType = MediaType.parse("application/json");
-        RequestBody body = RequestBody.create(mediaType, data);
-        Request request = new Request.Builder()
-                .url(HOST)
-                .post(body)
-                .addHeader("User-Agent", "LocationTracker/1.0")
-                .build();
+                MediaType mediaType = MediaType.parse("application/json");
+                RequestBody body = RequestBody.create(mediaType, data);
+                Request request = new Request.Builder()
+                        .url(HOST)
+                        .post(body)
+                        .addHeader("User-Agent", "LocationTracker/1.0")
+                        .build();
 
-        sendLogBroadcast("[" + requestType + "] 即将发送数据: " + data, "INFO");
-        sendLogBroadcast("[" + requestType + "] 发送HTTP请求到: " + HOST, "INFO");
-
-        try (Response response = client.newCall(request).execute()) {
-            if (response.isSuccessful()) {
-                sendLogBroadcast("[" + requestType + "] 请求成功，响应状态码: " + response.code(), "SUCCESS");
-                success = true;
-            } else {
-                sendLogBroadcast("[" + requestType + "] 发送HTTP请求失败，状态码: " + response.code(), "ERROR");
-                String responseBody = response.body() != null ? response.body().string() : "无响应内容";
-                sendLogBroadcast("[" + requestType + "] 响应内容: " + responseBody, "ERROR");
-                retryCount++;
-                // 不再输出重试日志
-                if (retryCount < maxRetries) {
-                    try {
-                        Thread.sleep(2000); // 等待2秒后重试
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        sendLogBroadcast("[" + requestType + "] 重试等待被中断", "WARNING");
-                        break;
+                try (Response response = client.newCall(request).execute()) {
+                    if (response.isSuccessful()) {
+                        String responseBody = response.body() != null ? response.body().string() : "";
+                        applyIntervalFromResponse(responseBody);
+                        success = true;
+                    } else {
+                        retryCount++;
+                        if (retryCount < maxRetries) {
+                            Thread.sleep(2000);
+                        }
                     }
                 }
-            }
-        }
-                
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
             } catch (SocketTimeoutException e) {
                 Log.e(TAG, "[" + requestType + "] 网络请求超时", e);
-                sendLogBroadcast("[" + requestType + "] 网络请求超时: " + e.getMessage(), "ERROR");
                 retryCount++;
-                // 不再输出重试日志
                 if (retryCount < maxRetries) {
                     try {
-                        Thread.sleep(3000); // 超时错误等待更长时间
+                        Thread.sleep(3000);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
-                        sendLogBroadcast("[" + requestType + "] 重试等待被中断", "WARNING");
                         break;
                     }
                 }
             } catch (SSLHandshakeException e) {
                 Log.e(TAG, "[" + requestType + "] SSL握手失败", e);
-                sendLogBroadcast("[" + requestType + "] SSL握手失败: " + e.getMessage(), "ERROR");
+                sendLogBroadcast("[" + requestType + "] SSL握手失败", "ERROR");
                 retryCount++;
-                // 不再输出重试日志
                 if (retryCount < maxRetries) {
                     try {
-                        Thread.sleep(3000); // SSL错误等待更长时间
+                        Thread.sleep(3000);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
-                        sendLogBroadcast("[" + requestType + "] 重试等待被中断", "WARNING");
                         break;
                     }
-            }
-        } catch (IOException e) {
+                }
+            } catch (IOException e) {
                 Log.e(TAG, "[" + requestType + "] 发送HTTP请求失败", e);
-                sendLogBroadcast("[" + requestType + "] 发送HTTP请求失败: " + e.getMessage(), "ERROR");
-                sendLogBroadcast("[" + requestType + "] 错误详情: " + e.toString(), "ERROR");
                 retryCount++;
-                // 不再输出重试日志
                 if (retryCount < maxRetries) {
                     try {
                         Thread.sleep(2000);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
-                        sendLogBroadcast("[" + requestType + "] 重试等待被中断", "WARNING");
                         break;
                     }
                 }
             } catch (Exception e) {
                 Log.e(TAG, "[" + requestType + "] 网络请求异常", e);
-                sendLogBroadcast("[" + requestType + "] 网络请求异常: " + e.getMessage(), "ERROR");
-                sendLogBroadcast("[" + requestType + "] 错误详情: " + e.toString(), "ERROR");
                 retryCount++;
-                // 不再输出重试日志
                 if (retryCount < maxRetries) {
                     try {
                         Thread.sleep(2000);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
-                        sendLogBroadcast("[" + requestType + "] 重试等待被中断", "WARNING");
                         break;
                     }
                 }
             }
         }
-        
-        if (!success) {
-            // 移除"已达到最大重试次数"的日志
-        }
-        
+
         return success;
     }
     
@@ -878,14 +905,24 @@ public class ltmService extends Service {
      */
     private void sendLogBroadcast(String message, String type) {
         try {
+            boolean important = "ERROR".equals(type) || "WARNING".equals(type)
+                    || (message != null && (
+                    message.contains("Token(ID)")
+                            || message.contains("[应用服务]服务启动成功")
+                            || message.contains("已同步 HA 上报间隔")
+                            || message.contains("位置服务已停止")
+                            || message.contains("位置服务已销毁")
+                            || message.contains("Webhook URL")));
+            if (!important) {
+                Log.d(TAG, "[" + type + "] " + message);
+                return;
+            }
             Intent intent = new Intent(MainActivity.ACTION_LOG_UPDATE);
             intent.putExtra(MainActivity.EXTRA_LOG_MESSAGE, message);
             intent.putExtra(MainActivity.EXTRA_LOG_TYPE, type);
             sendBroadcast(intent);
         } catch (Exception e) {
             Log.e(TAG, "发送日志广播失败: " + message, e);
-            // 如果广播发送失败，至少记录到系统日志
-            Log.d(TAG, "日志消息: [" + type + "] " + message);
         }
     }
     
@@ -1031,32 +1068,7 @@ public class ltmService extends Service {
      * 更新通知内容
      */
     private void updateNotificationContent(Location location) {
-        try {
-            if (notificationService != null && ltmService.getNotificationEnable() == 1) {
-                int batteryLevel = getBatteryLevel();
-                double latitude = location.getLatitude();
-                double longitude = location.getLongitude();
-                
-                // 只在系统日志中记录，不在运行日志中显示
-                Log.d(TAG, "数据上报成功，更新通知内容");
-                Log.d(TAG, "通知内容 - 电量:" + batteryLevel + "%, 位置:" + latitude + "," + longitude);
-                Log.d(TAG, "上报次数:" + reportCount + ", 上报数据与通知内容一致");
-                
-                notificationService.updateNotification(batteryLevel, latitude, longitude, 0, 0); // 使用当前时间，不需要timeSinceLastReport参数
-                
-                // 不在运行日志中显示通知内容更新信息
-            } else {
-                if (notificationService == null) {
-                    Log.w(TAG, "通知服务未初始化");
-                }
-                if (ltmService.getNotificationEnable() != 1) {
-                    Log.d(TAG, "通知功能未启用");
-                }
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "更新通知内容失败", e);
-            sendLogBroadcast("更新通知内容失败: " + e.getMessage(), "ERROR");
-        }
+        // 省电：不随定位刷新通知
     }
 
     /**
@@ -1064,57 +1076,16 @@ public class ltmService extends Service {
      */
     private void startKeepAliveTimer() {
         try {
-            // 生成保活定时器间隔
-            int min = 60; // 秒
-            int max;
-            
-            // 验证time变量的有效性，如果无效则使用默认值
-            if (time <= 0) {
-                sendLogBroadcast("配置的上报间隔无效，使用默认值60秒", "WARNING");
-                time = 60; // 设置默认值
-            }
-            
-            // 如果配置的上报间隔小于等于60秒，则保活定时器固定为60秒
-            if (time <= 60) {
-                max = 60; // 固定为60秒
-            } else {
-                max = time; // 使用配置的上报更新间隔作为最大值
-            }
-            
-            // 确保max >= min，避免负数或0的情况
-            if (max < min) {
-                max = min;
-                sendLogBroadcast("保活定时器间隔计算异常，使用最小值60秒", "WARNING");
-            }
-            
-            int randomSeconds = min + (int)(Math.random() * (max - min + 1));
-            long delayMillis = randomSeconds * 1000L;
-            sendLogBroadcast("保活定时器本轮间隔: " + randomSeconds + "秒 (范围: 60-" + max + "秒)", "INFO");
+            long delayMillis = 10 * 60 * 1000L;
             keepAliveHandler.postDelayed(new Runnable() {
                 @Override
                 public void run() {
                     checkAndRestartService();
-                    // 递归调用，形成定时器
                     startKeepAliveTimer();
                 }
             }, delayMillis);
         } catch (Exception e) {
             Log.e(TAG, "启动保活定时器失败", e);
-            sendLogBroadcast("启动保活定时器失败: " + e.getMessage(), "ERROR");
-            
-            // 异常情况下使用默认60秒间隔
-            try {
-                keepAliveHandler.postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        checkAndRestartService();
-                        startKeepAliveTimer();
-                    }
-                }, 60000); // 60秒
-                sendLogBroadcast("使用默认60秒保活间隔", "INFO");
-            } catch (Exception ex) {
-                Log.e(TAG, "设置默认保活间隔也失败", ex);
-            }
         }
     }
     
@@ -1297,186 +1268,53 @@ public class ltmService extends Service {
      */
     private void startLocationUpdates() {
         try {
-            // 检查定位提供者是否可用，按优先级选择
-            boolean isGpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
-            boolean isNetworkEnabled = locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER);
-            boolean isPassiveEnabled = locationManager.isProviderEnabled(LocationManager.PASSIVE_PROVIDER);
-            
-            String providerToUse = null;
-            String providerName = "";
-            
-            // 按优先级选择定位提供者
-            if (isGpsEnabled) {
-                providerToUse = LocationManager.GPS_PROVIDER;
-                providerName = "GPS";
-                sendLogBroadcast("GPS已开启，使用GPS定位", "SUCCESS");
-            } else if (isNetworkEnabled) {
-                providerToUse = LocationManager.NETWORK_PROVIDER;
-                providerName = "WLAN/移动网络";
-                sendLogBroadcast("GPS不可用，使用WLAN/移动网络定位", "WARNING");
-            } else if (isPassiveEnabled) {
-                providerToUse = LocationManager.PASSIVE_PROVIDER;
-                providerName = "被动定位";
-                sendLogBroadcast("GPS和网络定位不可用，使用被动定位", "WARNING");
-            } else {
-                sendLogBroadcast("所有定位功能未开启", "ERROR");
-                sendLogBroadcast("请在系统设置中开启定位功能", "ERROR");
+            if (locationManager == null || locationListener == null) {
                 isLocationRunning = false;
                 return;
             }
-            
-            // 尝试启动定位服务
-            boolean locationStarted = false;
             try {
-                long updateInterval = time * 1000; // 使用配置的间隔时间
-                
-                // 使用兼容的定位请求方法
-                requestLocationUpdatesCompat(providerToUse, updateInterval, 0, locationListener);
-                locationStarted = true;
-                sendLogBroadcast("成功启动" + providerName + "定位", "SUCCESS");
-                sendLogBroadcast("定位间隔设置为" + (updateInterval/1000) + "秒", "INFO");
-            } catch (SecurityException e) {
-                sendLogBroadcast("定位权限不足: " + e.getMessage(), "ERROR");
-            } catch (Exception e) {
-                sendLogBroadcast("启动" + providerName + "定位失败: " + e.getMessage(), "ERROR");
+                locationManager.removeUpdates(locationListener);
+            } catch (Exception ignored) {
             }
-            
-            // 如果首选定位方式失败，尝试备用方案
-            if (!locationStarted) {
-                sendLogBroadcast("尝试备用定位方案...", "INFO");
-                
-                // 尝试网络定位作为备用
-                if (isNetworkEnabled && !providerToUse.equals(LocationManager.NETWORK_PROVIDER)) {
-                    try {
-                        long updateInterval = time * 1000;
-                        // 使用兼容的定位请求方法
-                        requestLocationUpdatesCompat(LocationManager.NETWORK_PROVIDER, updateInterval, 0, locationListener);
-                        locationStarted = true;
-                        sendLogBroadcast("备用方案：成功启动WLAN/移动网络定位", "SUCCESS");
-                    } catch (Exception e) {
-                        sendLogBroadcast("备用WLAN/移动网络定位失败: " + e.getMessage(), "ERROR");
-                    }
-                }
-                
-                // 如果网络定位也失败，尝试被动定位
-                if (!locationStarted && isPassiveEnabled && !providerToUse.equals(LocationManager.PASSIVE_PROVIDER)) {
-                    try {
-                        long updateInterval = time * 1000;
-                        // 使用兼容的定位请求方法
-                        requestLocationUpdatesCompat(LocationManager.PASSIVE_PROVIDER, updateInterval, 0, locationListener);
-                        locationStarted = true;
-                        sendLogBroadcast("备用方案：成功启动被动定位", "SUCCESS");
-                    } catch (Exception e) {
-                        sendLogBroadcast("备用被动定位失败: " + e.getMessage(), "ERROR");
-                    }
-                }
+
+            boolean started = false;
+            // 被动定位：几乎不耗电，依赖系统其他定位机会刷新缓存
+            if (locationManager.isProviderEnabled(LocationManager.PASSIVE_PROVIDER)) {
+                requestLocationUpdatesCompat(LocationManager.PASSIVE_PROVIDER, 0, 0, locationListener);
+                started = true;
             }
-            
-            if (locationStarted) {
+            // 网络定位稀疏刷新，避免常开 GPS
+            if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                requestLocationUpdatesCompat(LocationManager.NETWORK_PROVIDER, 10 * 60 * 1000L, 100f, locationListener);
+                started = true;
+            }
+
+            if (started) {
                 isSartLocation = true;
                 isLocationRunning = true;
-                sendLogBroadcast("[应用服务]服务启动成功", "SUCCESS");
                 setFromMain(false);
-                Toast.makeText(getApplicationContext(), "开始定位", Toast.LENGTH_SHORT).show();
                 updateStatus();
+                sendLogBroadcast("[应用服务]服务启动成功", "SUCCESS");
             } else {
-                sendLogBroadcast("所有定位方式均启动失败", "ERROR");
+                sendLogBroadcast("所有定位功能未开启", "ERROR");
                 isLocationRunning = false;
             }
-            
         } catch (Exception e) {
             Log.e(TAG, "启动定位更新失败", e);
-            LocationTrackerApplication.logError("启动定位更新失败", e);
             sendLogBroadcast("启动定位更新失败: " + e.getMessage(), "ERROR");
         }
     }
     
-    /**
-     * 处理位置更新
-     */
     private void handleLocationUpdate(Location location) {
         try {
-            // 检查电量状态
             checkBatteryStatus();
-            
-            // 如果电量低于10%，停止定位上报
-            if (isLowBattery) {
+            if (isLowBattery || location == null) {
                 return;
             }
-            
-            // 只上报基本的位置信息
-            if (location.hasAccuracy() && location.getAccuracy() > 0) {
-                JSONObject jsonObject = new JSONObject();
-                try {
-                    jsonObject.put("latitude", location.getLatitude());
-                    jsonObject.put("longitude", location.getLongitude());
-                    jsonObject.put("altitude", location.getAltitude());
-                    jsonObject.put("gps_accuracy", location.getAccuracy());
-                    jsonObject.put("battery", getBatteryLevel());
-                    jsonObject.put("speed", location.getSpeed());
-                    jsonObject.put("bearing", location.getBearing());
-                    jsonObject.put("timestamp", System.currentTimeMillis());
-                    jsonObject.put("provider", location.getProvider());
-                    jsonObject.put("screen_off", isScreenOff);
-                    jsonObject.put("power_save_mode", isPowerSaveMode());
-                } catch (Exception e) {
-                    Log.e(TAG, "构建JSON对象失败", e);
-                    sendLogBroadcast("构建位置数据失败: " + e.getMessage(), "ERROR");
-                    return;
-                }
-                
-                String currentData = jsonObject.toString();
-                long currentTime = System.currentTimeMillis();
-                
-                // 检查数据是否发生变化且满足时间间隔要求
-                boolean dataChanged = !currentData.equals(lastReportedData);
-                boolean timeElapsed = (currentTime - lastReportTime) >= (time * 1000);
-                
-                // 添加详细的调试日志
-                long timeSinceLastReport = (currentTime - lastReportTime) / 1000;
-                
-                // 检查时间计算是否异常
-                if (lastReportTime == 0 || timeSinceLastReport < 0 || timeSinceLastReport > 3600) {
-                    sendLogBroadcast("⚠️ 检测到时间计算异常，重置lastReportTime", "WARNING");
-                    lastReportTime = currentTime - (time * 1000);
-                    timeSinceLastReport = time;
-                }
-                
-                sendLogBroadcast("🔍 定位更新 - 距离上次上报: " + timeSinceLastReport + "秒，配置间隔: " + time + "秒", "INFO");
-                sendLogBroadcast("🔍 位置变化: " + dataChanged + "，时间间隔满足: " + timeElapsed + "，电量正常: " + (!isLowBattery), "INFO");
-                
-                // 要求位置发生变化且时间间隔满足才上报
-                boolean shouldReport = dataChanged && timeElapsed;
-                
-                // 如果电量低于10%，不进行上报
-                if (isLowBattery) {
-                    shouldReport = false;
-                    sendLogBroadcast("⚠️ 电量低于10%，跳过上报", "WARNING");
-                }
-                
-                // 屏幕熄灭时，确保正常上报
-                if (isScreenOff && shouldReport) {
-                    sendLogBroadcast("📱 屏幕熄灭期间，正常上报位置数据", "INFO");
-                }
-                
-                if (shouldReport) {
-                    lastReportedData = currentData;
-                    lastReportTime = currentTime;
-                    
-                    // 发送数据到webhook，并在成功后更新通知
-                    sendDataToWebhookWithNotification(currentData, location);
-                } else {
-                    if (!dataChanged) {
-                        sendLogBroadcast("⏳ 位置未变化，跳过上报", "INFO");
-                    } else if (!timeElapsed) {
-                        sendLogBroadcast("⏳ 时间间隔未满足，跳过上报", "INFO");
-                    }
-                }
-            }
+            lastLocation = location;
+            isConnected = true;
         } catch (Exception e) {
             Log.e(TAG, "处理位置更新失败", e);
-            LocationTrackerApplication.logError("处理位置更新失败", e);
-            sendLogBroadcast("处理位置更新失败: " + e.getMessage(), "ERROR");
         }
     }
 

@@ -11,7 +11,7 @@
 [![Phone UI](https://img.shields.io/badge/Phone%20UI-Single%20Panel-brightgreen.svg)](https://haoxiang.eu.org/ui/MOBILE_UI_PREVIEW)
 [![Tablet UI](https://img.shields.io/badge/Tablet%20UI-Optimized%20for%20Large%20Screen-blue.svg)](https://haoxiang.eu.org/ui/TABLET_UI_PREVIEW)
 
-> 📱 **LocationTracker App** - Send Android device location data to Home Assistant or other servers via HTTP Webhook
+> 📱 **LocationTracker App** - Push Android location to Home Assistant via HTTP webhook (recommended: `ha_loca_device`)
 
 ## 🚨 Important Notice
 
@@ -31,18 +31,19 @@
 1. Download the [APK file](./app/build/outputs/apk/release/)
 2. Install on your Android device
 3. Grant necessary permissions
-4. Configure Webhook URL (must be http/https, validated, not empty)
-5. Set reporting interval (10~10800 seconds, not empty, validated)
+4. Set HA base URL (e.g. `https://ha.example.com`; app auto-generates Webhook ID and appends `/api/webhook/<id>`)
+5. Set local initial interval (10~10800s, default 60; after a successful push, HA `ha_loca_device` interval wins and syncs)
 6. Tap "Start Location" to begin
 
 ### ⚡ Core Features
 - 📍 **Real-time Location**: GPS/network location, accurate reporting
+- 🔗 **HA pairing**: Base URL → auto Webhook ID, works with `ha_loca_device`
+- ⏱️ **Interval sync**: Applies HA `update_interval` from successful responses
 - 🔄 **Data Deduplication**: Avoid duplicate location reports
 - 🔋 **Low Battery Protection**: Auto-pause reporting below 10% battery
-- 🌙 **Background Keep-alive**: Auto-start on boot, service auto-restart
+- 🌙 **Background Keep-alive**: Auto-start on boot; quiet keep-alive notification
 - 🎨 **Transparent Status Bar**: Android 4.4+ supported
 - 🛡️ **Global Exception Capture**: Crashes are logged and user is notified
-- 📝 **Input Validation**: Strict checks for Webhook URL and interval
 - 🖥️ **Multi-resolution Support**: Adapts to different screen sizes
 - 🔧 **Device Optimization Guide**: Built-in brand-specific optimization tips
 - 🔒 **SQL Injection Protection**: Parameterized queries for DB
@@ -55,7 +56,7 @@
 ### 📱 Phone Features
 - **Single panel design**: Bottom TAB switch, clean UI
 - **Status Monitor**: Real-time connection, location, battery, report count
-- **Config Panel**: Webhook URL, interval, notification switch
+- **Config Panel**: HA base URL, local initial interval, notification switch
 - **Log Panel**: Real-time app status and report logs
 
 ### 📟 Tablet Features
@@ -69,13 +70,13 @@
 ### First Use
 1. **Install the app**: Download and install the APK file
 2. **Grant permissions**: Allow location, network, auto-start, etc.
-3. **Configure parameters**: Set Webhook URL and reporting interval in the config panel
+3. **Configure**: Enter HA base URL and local initial interval; note the auto Webhook ID and add `ha_loca_device` in HA
 4. **Start service**: Tap "Start Location" to begin reporting
 5. **Monitor status**: Switch to the monitor panel to view status and logs
 
 ### UI Operations
 - **📊 Monitor Panel**: View connection, location, battery, report count
-- **⚙️ Config Panel**: Set Webhook URL, interval, notification switch
+- **⚙️ Config Panel**: HA base URL, local initial interval, notification switch
 - **📱 Bottom Navigation**: Switch between monitor and config panels
 - **🛠️ Log Management**: Tap "🛠️ Log" to view crash logs
 - **🔧 Optimization Settings**: Tap "Optimization Settings" for device-specific tips
@@ -85,13 +86,13 @@
 - **Background running**: Service runs in the background, no manual intervention needed
 - **Status monitoring**: View connection and report count in the status panel
 - **Log viewing**: Check detailed logs for troubleshooting
-- **Notification monitoring**: See current report time and status in the notification bar
+- **Keep-alive notification**: Quiet foreground notification only; not refreshed every report
 
 ### Troubleshooting
 1. **Service won't start**: Check if GPS is on and permissions are granted
-2. **Data upload fails**: Check network connection and Webhook URL
+2. **Data upload fails**: Check network / public HA URL; ensure Webhook ID matches `ha_loca_device`
 3. **Service killed in background**: Check device optimization settings
-4. **High battery usage**: Increase reporting interval or enable low battery protection
+4. **High battery usage**: Increase interval in the HA integration or enable low battery protection
 5. **Theme compatibility issues**: The app has built-in theme adaptation; check crash logs if issues persist
 
 ## 📋 Permissions
@@ -129,7 +130,7 @@
 ✅ **API Compatibility**: Fixed all API level compatibility issues
 
 ### Security Recommendations
-- 🔐 Use HTTPS Webhook URLs
+- 🔐 Use HTTPS public HA URL
 - 🔐 Update the app regularly
 - 🔐 Use in trusted networks
 - 🔐 Regularly check reported data accuracy
@@ -137,13 +138,11 @@
 ## ⚙️ Configuration
 
 ### Basic Configuration
-1. **Webhook URL**: Must start with http/https, not empty, validated
-2. **Reporting interval**: 10~10800 seconds, not empty, validated
-3. **Notification switch**: Controls foreground notification, keeps app running in background
+1. **HA base URL**: http/https root; app auto-generates Webhook ID and builds `/api/webhook/<id>`
+2. **Local initial interval**: 10~10800s; empty/out-of-range falls back to 60; after success, HA `update_interval` applies
+3. **Notification switch**: Quiet keep-alive foreground notification (not refreshed every report)
 
 ### Data Format
-
-The app sends different data formats depending on the reporting scenario:
 
 #### Standard Location Report
 ```json
@@ -180,16 +179,7 @@ The app sends different data formats depending on the reporting scenario:
 }
 ```
 
-#### WorkManager Simple Format
-```json
-{
-  "latitude": 37.7749,
-  "longitude": -122.4194,
-  "altitude": 100.5,
-  "accuracy": 5.0,
-  "timestamp": 1640995200000
-}
-```
+HA success response example: `{"ok":true,"update_interval":60}`
 
 ### Field Descriptions
 
@@ -198,7 +188,7 @@ The app sends different data formats depending on the reporting scenario:
 | `latitude` | number | Latitude | ✅ |
 | `longitude` | number | Longitude | ✅ |
 | `altitude` | number | Altitude (meters) | ⚠️ |
-| `gps_accuracy` / `accuracy` | number | GPS accuracy (meters) | ⚠️ |
+| `gps_accuracy` | number | GPS accuracy (meters) | ⚠️ |
 | `battery` | number | Battery percentage | ⚠️ |
 | `speed` | number | Speed (m/s) | ⚠️ |
 | `bearing` | number | Bearing (0-360°) | ⚠️ |
@@ -244,50 +234,37 @@ The app sends different data formats depending on the reporting scenario:
 
 ## 🏠 Home Assistant Integration
 
-> 💡 **Recommended**: Use with [TRSDM Dynamic Device Tracker](https://github.com/Dekadinious/trsdm_custom_device_tracker_for_home_assistant) for flexible device and attribute management
+> Recommended: use the bundled `ha_loca_device` integration (HTTP webhook, one entry per device).
 
-### Solution 1: TRSDM Dynamic Device Tracker (Recommended)
+### Solution 1: ha_loca_device (Recommended)
 
-#### Installation Steps
-1. Make sure [HACS](https://hacs.xyz/) (Home Assistant Community Store) is installed
-2. In Home Assistant, go to HACS > Integrations
-3. Click the "+" button and search for "TRSDM Dynamic Device Tracker"
-4. Click to install the TRSDM Dynamic Device Tracker integration
-5. Restart Home Assistant
+#### Install
+1. Copy the repo folder `ha_loca_device` to Home Assistant `custom_components/ha_loca_device`
+2. Or add this repo as a HACS custom repository (Integration) and install `ha_loca_device`
+3. Restart Home Assistant
 
-#### Configuration Steps
-1. In Home Assistant, go to Settings > Devices & Services
-2. Click the "+" button to add a new integration
-3. Search for "TRSDM Dynamic Device Tracker" and select it
-4. Follow the prompts to set up your first device tracker:
-   - Give the tracker a name (e.g., "My Phone")
-   - The integration will automatically generate a unique webhook URL
+#### Configure
+1. Enter the HA base URL in the app and start; note the auto-generated Webhook ID
+2. Add `ha_loca_device` with device name, Webhook ID, and report interval
+3. The app pushes to the public webhook; interval follows HA config (synced after each successful push)
 
-#### Usage
-1. **Configure Webhook URL**: Enter the Home Assistant webhook URL in the app's config panel
-2. **Set reporting interval**: Configure the location reporting interval (10-10800 seconds)
-3. **Start service**: Tap "Start Location" to start reporting
-4. **Auto reporting**: The app will automatically send location data to the webhook URL at the configured interval
+#### App pairing
+1. Report URL: `https://your-ha` (app appends `/api/webhook/<id>`)
+2. Works over the internet / mobile data as long as the phone can reach HA
+3. Notification is keep-alive only
 
-**Example config**:
-- Webhook URL: `https://your-home-assistant-url/api/webhook/your-webhook-id`
-- Reporting interval: `60` seconds
-- Notification switch: `On` (keep app running in background)
+**Example**:
+- App: `https://ha.example.com` → `https://ha.example.com/api/webhook/<auto-id>`
+- HA interval: 60 seconds (changeable in integration options)
 
-**Data format**: The app will automatically send JSON data with location info; only `latitude` and `longitude` are always required, other fields are added as available.
+**JSON fields**: `latitude` / `longitude` required; optional `gps_accuracy`, `battery`, `altitude`, `speed`, `bearing`, `timestamp`, `provider`, `screen_off`, `power_save_mode`, `immediate_report`
 
-> ⚠️ **Important**: The reporting address must use a domain name or public IP, not a local IP (e.g., 192.168.x.x, 10.x.x.x, etc.). Phones need to access Home Assistant via the internet, so local IPs won't work.
+> The webhook host must be a public domain or public IP, not a LAN address.
 
-#### Standard Attributes
-- Distance from home (meters and miles)
-- Direction relative to home (towards, away_from, stationary)
-- Bearing from home (N, NE, E, SE, S, SW, W, NW)
-- Last update timestamp
-- Last significant location change (10m accumulated)
+See [`ha_loca_device/README.md`](./ha_loca_device/README.md).
 
-### Solution 2: Native Webhook Integration
+### Solution 2: Native webhook automation (fallback)
 
-#### Automation Config
 ```yaml
 automation:
   - alias: "Location Update"
@@ -298,45 +275,15 @@ automation:
       - service: device_tracker.see
         data:
           dev_id: myphone
-          location_name: home
           latitude: "{{ trigger.json.latitude }}"
           longitude: "{{ trigger.json.longitude }}"
           gps_accuracy: "{{ trigger.json.gps_accuracy }}"
           battery: "{{ trigger.json.battery }}"
 ```
 
-#### Device Tracker Config
-```yaml
-device_tracker:
-  - platform: webhook
-    webhook_id: your_webhook_id
-    name: "My Phone"
-    icon: mdi:cellphone
-```
+### Solution 3: ha_icloud_cn (Apple devices, optional)
 
-### Solution Comparison
-
-| Feature | TRSDM Dynamic Device Tracker | Native Webhook |
-|---------|------------------------------|----------------|
-| **Install Difficulty** | ⭐⭐⭐ Needs HACS | ⭐⭐ Native |
-| **Config Flexibility** | ⭐⭐⭐⭐⭐ Highly customizable | ⭐⭐ Basic |
-| **Attribute Management** | ⭐⭐⭐⭐⭐ Dynamic | ⭐⭐ Fixed |
-| **Device Count** | ⭐⭐⭐⭐⭐ Unlimited | ⭐⭐⭐ Limited |
-| **UI Friendliness** | ⭐⭐⭐⭐⭐ GUI | ⭐⭐ Code config |
-| **Maintenance** | ⭐⭐⭐⭐⭐ Easy | ⭐⭐ Manual |
-
-### Recommended Scenarios
-
-#### TRSDM Dynamic Device Tracker is best for:
-- 🏠 **Home users**: Need GUI config
-- 🔧 **Developers**: Need flexible attribute/device management
-- 📱 **Multi-device**: Need to track multiple devices
-- 🎯 **Customization**: Need custom attributes/features
-
-#### Native Webhook is best for:
-- 🚀 **Quick setup**: Simple one-to-one tracking
-- 📚 **Learning**: Understand Home Assistant basics
-- 🔒 **Security**: Don't want third-party plugins
+China mainland iCloud (`icloud.com.cn`) Find My for Apple devices; unrelated to this Android app. Copy `ha_icloud_cn` into `custom_components` and restart HA. See [`ha_icloud_cn/README.md`](./ha_icloud_cn/README.md).
 
 ### Development Environment
 - Android Studio 4.0+
@@ -426,7 +373,7 @@ WEBHOOK_URL=your webhook URL
 1. Download APK from release
 2. Install on Android device
 3. Grant necessary permissions
-4. Configure Webhook URL and interval
+4. Configure HA base URL and local initial interval
 
 #### Method 2: Build from Source
 1. Clone the repo
@@ -559,6 +506,13 @@ MIT License, see LICENSE.
 **Note**: Please comply with local laws when using this app.
 
 ## 📝 Changelog
+
+### Current (ha_loca_device pairing)
+- App takes HA base URL, auto-generates Webhook ID, builds `/api/webhook/<id>`
+- Report interval follows HA `ha_loca_device`; syncs from response `update_interval`
+- Quiet keep-alive notification; no per-report content refresh
+- Sparse GPS sampling + timer reports; screen off no longer rebinds GPS
+- New integrations in repo: `ha_loca_device` (Android push), `ha_icloud_cn` (CN iCloud)
 
 ### v2.1.6 (2024-07-19)
 - Location reporting strategy optimized: during daytime, reporting continues regardless of stationary/moving/screen-off; at night, reporting pauses when stationary

@@ -518,8 +518,10 @@ public class MainActivity extends AppCompatActivity {
                 Log.d(TAG, "从数据库读取 - URL: " + url + ", Time: " + time + ", Notification: " + notification);
                 
                 if (txtWebhookUrl != null) {
-                    Log.d(TAG, "设置Webhook URL: " + url);
-                    txtWebhookUrl.setText(url);
+                    Utils.syncWebhookIdFromUrl(this, url);
+                    String normalized = Utils.buildWebhookUrl(this, url);
+                    txtWebhookUrl.setText(normalized);
+                    Log.d(TAG, "设置Webhook URL: " + normalized);
                 } else {
                     Log.e(TAG, "txtWebhookUrl为null");
                 }
@@ -817,37 +819,39 @@ public class MainActivity extends AppCompatActivity {
             logAdapter.addLog("开始启动位置服务...", "INFO");
             
                 // 输入验证
-                String webhookUrl = txtWebhookUrl.getText().toString().trim();
+                String webhookInput = txtWebhookUrl.getText().toString().trim();
                 String timeStr = txtTime.getText().toString().trim();
-                
-                if(webhookUrl.equals("") || timeStr.equals("")) {
-                Toast.makeText(MainActivity.this, getString(R.string.fill_required), Toast.LENGTH_LONG).show();
-                logAdapter.addLog("配置验证失败：填写项不能为空", "ERROR");
+                if (timeStr.equals("")) {
+                    timeStr = "60";
+                    if (txtTime != null) {
+                        txtTime.setText(timeStr);
+                    }
+                }
+
+                if (webhookInput.equals("")) {
+                    Toast.makeText(MainActivity.this, getString(R.string.fill_required), Toast.LENGTH_LONG).show();
                     return;
                 }
-                
-                // 验证URL格式
-                if(!webhookUrl.startsWith("http://") && !webhookUrl.startsWith("https://")) {
-                Toast.makeText(MainActivity.this, getString(R.string.invalid_url), Toast.LENGTH_LONG).show();
-                logAdapter.addLog("配置验证失败：无效的URL格式", "ERROR");
+                if (!webhookInput.startsWith("http://") && !webhookInput.startsWith("https://")) {
+                    Toast.makeText(MainActivity.this, getString(R.string.invalid_url), Toast.LENGTH_LONG).show();
                     return;
                 }
+
+                String webhookUrl = Utils.buildWebhookUrl(this, webhookInput);
+                String webhookId = Utils.getOrCreateWebhookId(this);
+                if (txtWebhookUrl != null) {
+                    txtWebhookUrl.setText(webhookUrl);
+                }
                 
-                // 验证时间间隔
                 int time;
                 try {
                     time = Integer.parseInt(timeStr);
-                    if(time < 10 || time > 10800) {
-                    Toast.makeText(MainActivity.this, "时间间隔必须在10-10800秒之间", Toast.LENGTH_LONG).show();
-                    logAdapter.addLog("配置验证失败：时间间隔必须在10-10800秒之间", "ERROR");
-                    return;
+                    if (time < 10 || time > 10800) {
+                        time = 60;
+                    }
+                } catch (NumberFormatException e) {
+                    time = 60;
                 }
-            } catch (NumberFormatException e) {
-                Toast.makeText(MainActivity.this, getString(R.string.invalid_format), Toast.LENGTH_LONG).show();
-                logAdapter.addLog("配置验证失败：时间间隔格式不正确", "ERROR");
-                logAdapter.addLog("错误详情: " + e.toString(), "ERROR");
-                return;
-            }
             
             logAdapter.addLog("配置验证通过", "SUCCESS");
             logAdapter.addLog("保存配置到数据库...", "INFO");
@@ -855,20 +859,17 @@ public class MainActivity extends AppCompatActivity {
             DataBaseOpenHelper dataBaseOpenHelper = new DataBaseOpenHelper(this);
                 SQLiteDatabase db = dataBaseOpenHelper.getWritableDatabase();
                 try {
-                    // 使用参数化查询防止SQL注入
                     String sql = "UPDATE " + Contant.TABLENAME + " SET url=?, time=?, notification_enable=?";
                     db.execSQL(sql, new Object[]{webhookUrl, time, sw_notification.isChecked() ? 1 : 0});
                 logAdapter.addLog("配置已保存到数据库", "SUCCESS");
                 
-                // 更新服务中的配置
                 ltmService.HOST = webhookUrl;
-                ltmService.setTimeInterval(time);  // 使用新的方法设置时间间隔
+                ltmService.setTimeInterval(time);
                 ltmService.setNotificationEnable(sw_notification.isChecked() ? 1 : 0);
                 
-                logAdapter.addLog("配置已更新到服务", "SUCCESS");
                 logAdapter.addLog("📡 Webhook URL: " + webhookUrl, "INFO");
-                logAdapter.addLog("⏱️ 更新周期: " + time + "秒", "INFO");
-                logAdapter.addLog("🔔 通知开关: " + (sw_notification.isChecked() ? "开启" : "关闭"), "INFO");
+                logAdapter.addLog("🔑 Webhook ID: " + webhookId, "INFO");
+                logAdapter.addLog("⏱️ 初始间隔: " + time + "秒（可被 HA 配置覆盖）", "INFO");
                 logAdapter.addLog("=== 配置修改成功 ===", "SUCCESS");
                 
             } catch (Exception e) {
@@ -1105,45 +1106,33 @@ public class MainActivity extends AppCompatActivity {
         try {
             logAdapter.addLog("检查配置参数...", "INFO");
             
-            // 获取配置参数
-            String webhookUrl = txtWebhookUrl.getText().toString().trim();
+            String webhookInput = txtWebhookUrl.getText().toString().trim();
             String timeStr = txtTime.getText().toString().trim();
-            
-            logAdapter.addLog("Webhook URL: " + webhookUrl, "INFO");
-            logAdapter.addLog("更新周期: " + timeStr + "秒", "INFO");
-            
-            // 验证配置
-            if(webhookUrl.equals("") || timeStr.equals("")) {
-                logAdapter.addLog("配置验证失败：填写项不能为空", "ERROR");
-                logAdapter.addLog("请手动填写配置后点击开始定位", "WARNING");
+            if (timeStr.equals("")) {
+                timeStr = "60";
+            }
+            if (webhookInput.equals("") || (!webhookInput.startsWith("http://") && !webhookInput.startsWith("https://"))) {
+                logAdapter.addLog("配置验证失败：请填写有效的 HA 地址", "ERROR");
                 return;
             }
-            
-            // 验证URL格式
-            if(!webhookUrl.startsWith("http://") && !webhookUrl.startsWith("https://")) {
-                logAdapter.addLog("配置验证失败：无效的URL格式", "ERROR");
-                logAdapter.addLog("请检查Webhook URL格式", "WARNING");
-                return;
+            String webhookUrl = Utils.buildWebhookUrl(this, webhookInput);
+            String webhookId = Utils.getOrCreateWebhookId(this);
+            if (txtWebhookUrl != null) {
+                txtWebhookUrl.setText(webhookUrl);
             }
             
-            // 验证时间间隔
             int time;
             try {
                 time = Integer.parseInt(timeStr);
-                if(time < 10 || time > 10800) {
-                    logAdapter.addLog("配置验证失败：时间间隔必须在10-10800秒之间", "ERROR");
-                    logAdapter.addLog("请调整更新周期", "WARNING");
-                    return;
+                if (time < 10 || time > 10800) {
+                    time = 60;
                 }
             } catch (NumberFormatException e) {
-                logAdapter.addLog("配置验证失败：时间间隔格式不正确", "ERROR");
-                logAdapter.addLog("错误详情: " + e.toString(), "ERROR");
-                return;
+                time = 60;
             }
             
             logAdapter.addLog("配置验证通过，开始自动启动定位服务", "SUCCESS");
             
-            // 保存配置到数据库
             logAdapter.addLog("保存配置到数据库...", "INFO");
             DataBaseOpenHelper dataBaseOpenHelper = new DataBaseOpenHelper(this);
             SQLiteDatabase db = dataBaseOpenHelper.getWritableDatabase();
@@ -1152,14 +1141,12 @@ public class MainActivity extends AppCompatActivity {
                 db.execSQL(sql, new Object[]{webhookUrl, time, sw_notification.isChecked() ? 1 : 0});
                 logAdapter.addLog("配置保存成功", "SUCCESS");
                 
-                // 更新服务中的配置
                 ltmService.HOST = webhookUrl;
                 ltmService.setMode(time);
                 ltmService.setNotificationEnable(sw_notification.isChecked() ? 1 : 0);
                 
-                logAdapter.addLog("配置已更新到服务", "SUCCESS");
                 logAdapter.addLog("Webhook URL: " + webhookUrl, "INFO");
-                logAdapter.addLog("更新周期: " + time + "秒", "INFO");
+                logAdapter.addLog("Webhook ID: " + webhookId, "INFO");
                 logAdapter.addLog("通知开关: " + (sw_notification.isChecked() ? "开启" : "关闭"), "INFO");
                 
             } catch (Exception e) {

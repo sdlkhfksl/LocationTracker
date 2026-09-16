@@ -44,6 +44,7 @@
         android:roundIcon="@mipmap/ha"
         android:supportsRtl="true"
         android:theme="@style/Theme.LocationTracker"
+        android:usesCleartextTraffic="true"
         android:process=":location"
         android:hardwareAccelerated="true"
         android:largeHeap="true">

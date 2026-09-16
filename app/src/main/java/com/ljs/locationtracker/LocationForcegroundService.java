@@ -11,12 +11,7 @@ import android.os.IBinder;
 
 public class LocationForcegroundService extends Service {
 
-    // 通知数据
-    private int batteryLevel = 0;
-    private double latitude = 0.0;
-    private double longitude = 0.0;
-    private int reportCount = 0;
-    private long timeSinceLastReport = 0;
+    private boolean notifyShown = false;
 
     @Override
     public void onCreate() {
@@ -31,16 +26,8 @@ public class LocationForcegroundService extends Service {
     @TargetApi(Build.VERSION_CODES.JELLY_BEAN)
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        //Android O上才显示通知栏
-        if(Build.VERSION.SDK_INT >= 26) {
-            showNotify();
-        } else {
-            // Android 4.0-7.1 使用旧的前台服务方式
-            if(ltmService.getNotificationEnable() == 1) {
-                startForeground(Utils.NOTIFY_ID, Utils.buildNotification(getApplicationContext(), batteryLevel, latitude, longitude, reportCount, timeSinceLastReport));
-            }
-        }
-        return super.onStartCommand(intent, flags, startId);
+        showNotify();
+        return START_STICKY;
     }
 
     @Override
@@ -48,32 +35,22 @@ public class LocationForcegroundService extends Service {
         super.onDestroy();
     }
 
-    //显示通知栏
     @SuppressLint("NewApi")
-    public void showNotify(){
-        //调用这个方法把服务设置成前台服务
-        if(ltmService.getNotificationEnable() == 1) {
-            Notification notification = Utils.buildNotification(getApplicationContext(), batteryLevel, latitude, longitude, reportCount, timeSinceLastReport);
-            if (notification != null) {
-                startForeground(Utils.NOTIFY_ID, notification);
-            }
+    public void showNotify() {
+        if (ltmService.getNotificationEnable() != 1) {
+            return;
+        }
+        Notification notification = Utils.buildQuietNotification(getApplicationContext());
+        if (notification != null) {
+            startForeground(Utils.NOTIFY_ID, notification);
+            notifyShown = true;
         }
     }
-    
-    // 更新通知内容
+
     public void updateNotification(int batteryLevel, double latitude, double longitude, int reportCount, long timeSinceLastReport) {
-        this.batteryLevel = batteryLevel;
-        this.latitude = latitude;
-        this.longitude = longitude;
-        this.reportCount = reportCount;
-        this.timeSinceLastReport = timeSinceLastReport;
-        
-        if(ltmService.getNotificationEnable() == 1) {
-            Notification notification = Utils.buildNotification(getApplicationContext(), batteryLevel, latitude, longitude, reportCount, timeSinceLastReport);
-            if (notification != null) {
-                android.app.NotificationManager notificationManager = (android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE);
-                notificationManager.notify(Utils.NOTIFY_ID, notification);
-            }
+        // 省电：不频繁刷新通知内容，仅保证前台保活通知存在
+        if (!notifyShown) {
+            showNotify();
         }
     }
 

@@ -1,0 +1,63 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add location device",
+        "description": "Enter the App-generated Webhook ID and report interval. The phone pushes location to the HA public webhook.",
+        "data": {
+          "name": "Device name",
+          "webhook_id": "Webhook ID",
+          "update_interval": "Report interval (seconds)"
+        }
+      }
+    },
+    "error": {
+      "invalid_name": "Device name cannot be empty",
+      "invalid_webhook_id": "Invalid webhook ID"
+    },
+    "abort": {
+      "already_configured": "This device is already configured"
+    },
+    "create_entry": {
+      "default": "Put this URL into the app (or only the HA base URL; the app appends the ID):\n\n{webhook_url}"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Report settings",
+        "description": "Webhook: {webhook_url}\nID: {webhook_id}\nAfter changing the interval, the app syncs on the next successful push.",
+        "data": {
+          "update_interval": "Report interval (seconds)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "device_tracker": {
+      "location": {
+        "name": "Location"
+      }
+    },
+    "sensor": {
+      "battery": {
+        "name": "Battery"
+      },
+      "gps_accuracy": {
+        "name": "GPS accuracy"
+      },
+      "speed": {
+        "name": "Speed"
+      },
+      "altitude": {
+        "name": "Altitude"
+      },
+      "last_update": {
+        "name": "Last update"
+      },
+      "provider": {
+        "name": "Provider"
+      }
+    }
+  }
+}

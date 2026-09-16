@@ -1,0 +1,63 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "添加定位设备",
+        "description": "填入 App 自动生成的 Webhook ID，以及上报间隔。App 向 HA 公网 Webhook 主动推送定位。",
+        "data": {
+          "name": "设备名称",
+          "webhook_id": "Webhook ID",
+          "update_interval": "上报间隔（秒）"
+        }
+      }
+    },
+    "error": {
+      "invalid_name": "设备名称不能为空",
+      "invalid_webhook_id": "Webhook ID 无效"
+    },
+    "abort": {
+      "already_configured": "该设备已配置"
+    },
+    "create_entry": {
+      "default": "请将此地址填入 App 上报地址（或只填 HA 根地址，App 会自动拼 ID）：\n\n{webhook_url}"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "上报设置",
+        "description": "Webhook：{webhook_url}\nID：{webhook_id}\n修改间隔后，App 下次上报成功会自动同步。",
+        "data": {
+          "update_interval": "上报间隔（秒）"
+        }
+      }
+    }
+  },
+  "entity": {
+    "device_tracker": {
+      "location": {
+        "name": "位置"
+      }
+    },
+    "sensor": {
+      "battery": {
+        "name": "电量"
+      },
+      "gps_accuracy": {
+        "name": "定位精度"
+      },
+      "speed": {
+        "name": "速度"
+      },
+      "altitude": {
+        "name": "海拔"
+      },
+      "last_update": {
+        "name": "最后更新"
+      },
+      "provider": {
+        "name": "定位来源"
+      }
+    }
+  }
+}

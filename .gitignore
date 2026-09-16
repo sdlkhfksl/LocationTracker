@@ -1,12 +1,8 @@
 *.iml
 .gradle
 /local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
+/.idea/
+/app/.idea/
 .DS_Store
 /keystore
 /server
@@ -15,3 +11,22 @@
 .cxx
 local.properties
 RELEASE_SIGNING_INFO.md
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.venv/
+venv/
+.env
+
+# Android build
+/build/
+/app/build/
+*.apk
+*.aab
+*.ap_
+*.dex

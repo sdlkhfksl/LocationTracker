@@ -1,0 +1,11 @@
+{
+  "domain": "ha_loca_device",
+  "name": "ha_loca_device",
+  "codeowners": ["@ljs"],
+  "config_flow": true,
+  "documentation": "https://github.com/ljs/LocationTracker",
+  "iot_class": "cloud_push",
+  "issue_tracker": "https://github.com/ljs/LocationTracker/issues",
+  "requirements": [],
+  "version": "1.0.0"
+}
