@@ -2,166 +2,83 @@
   <b>中文</b> | <a href="./README.en.md">英文</a>
 </p>
 
-<br>
+# LocationTracker
 
-# 智能位置上报
+Android 位置上报 App（V2.1.6，minSdk 14）。填 HA 根地址后自动生成 Webhook ID，经 HTTP POST 推送到 Home Assistant（推荐 `ha_loca_device`）。
 
-[![Android版本](https://img.shields.io/badge/Android-4.0+-green.svg)](https://developer.android.com/about/versions/android-4.0)
-[![版本号](https://img.shields.io/badge/版本-V2.1.6-blue.svg)](https://github.com/Hosiang1026/LocationTracker/releases)
-[![手机界面](https://img.shields.io/badge/手机界面-单面板设计-brightgreen.svg)](https://haoxiang.eu.org/ui/MOBILE_UI_PREVIEW)
-[![平板界面](https://img.shields.io/badge/平板界面-大屏优化-blue.svg)](https://haoxiang.eu.org/ui/TABLET_UI_PREVIEW)
+业务源码：`app/src/main/java/com/ljs/locationtracker/`  
+HA 插件：`ha_loca_device/`（HACS 集成）
 
-> 📱 **智能位置上报应用** - 通过 HTTP Webhook 将安卓设备位置推送到 Home Assistant（推荐 `ha_loca_device`）
+开源免费；仅从 GitHub 仓库下载。
 
-## 🚨 重要提醒
+## 调用链
 
-> 🚨 **防骗声明**: 本应用完全开源免费，请勿相信任何付费版本或收费服务！
-> 
-> - 📱 **官方渠道**: 仅通过GitHub官方仓库下载
-> - 💰 **完全免费**: 所有功能完全免费，无任何收费项目
-> - 🔒 **开源透明**: 代码完全开源，可自由查看和修改
-> - ⚠️ **警惕诈骗**: 如遇收费要求，请立即举报并拉黑
-> - 📞 **官方支持**: 如有问题请通过GitHub Issues反馈
+```
+MainActivity 保存配置
+  → Utils.buildWebhookUrl（根地址 + 本机 UUID → /api/webhook/<id>）
+  → SQLite config 表落盘
+  → 启动 ltmService / LocationForcegroundService
+
+ltmService
+  GPS/Network 稀疏采样（默认 600s）
+  → 定时 reportRunnable（本地初始间隔 10~10800s，默认 60）
+  → 组装 JSON POST → HA Webhook
+  → 成功响应 update_interval → 同步本地间隔
+  → 电量 ≤10% 暂停上报
+
+BootBroadcastReceiver
+  BOOT_COMPLETED / SCREEN_* / 自定义 start
+  → 拉起 ltmService 保活
+
+HA ha_loca_device
+  webhook 收包 → coordinator 更新 device_tracker / sensor
+  → 响应 {"ok":true,"update_interval":N}
+```
+
+## 目录
+
+| 路径 | 作用 |
+| ---- | ---- |
+| `app/.../MainActivity.java` | UI：监控 / 配置 / 日志 |
+| `app/.../ltmService.java` | 定位采样、定时上报、间隔同步、低电量保护 |
+| `app/.../LocationForcegroundService.java` | 前台保活服务 |
+| `app/.../Utils.java` | Webhook ID、URL 拼接、静默通知 |
+| `app/.../ConfigSyncService.java` | 可选远程配置同步 |
+| `app/.../BootBroadcastReceiver.java` | 开机 / 屏状态 / 保活拉起 |
+| `app/.../DataBaseOpenHelper.java` | SQLite 配置持久化 |
+| `app/.../DeviceOptimizationHelper.java` | 各品牌后台优化指导 |
+| `app/.../HonorKeepAliveHelper.java` | 华为/荣耀保活 |
+| `ha_loca_device/` | HA Webhook 集成（device_tracker + sensor） |
+| `ui/` | 手机 / 平板界面预览 HTML |
+| `build_scripts.sh` / `.bat` | 打包脚本 |
 
 ---
 
-## 🚀 快速开始
+## 快速使用
 
-### 📥 安装
-1. 下载 [APK文件](./app/build/outputs/apk/release/)
-2. 安装到Android设备
-3. 授予必要权限
-4. 配置 HA 上报地址（填 HA 根地址，如 `https://ha.example.com`，App 自动生成 Webhook ID 并拼 `/api/webhook/<id>`）
-5. 配置本地初始间隔（10~10800秒，默认60；上报成功后以 HA `ha_loca_device` 配置为准并自动同步）
-6. 点击"开始定位"即可使用
+1. 安装 [APK](./app/build/outputs/apk/release/) 或自行编译
+2. 授予定位 / 网络 / 后台相关权限
+3. 配置面板填 HA 根地址（如 `https://ha.example.com`），记下自动生成的 Webhook ID
+4. 本地初始间隔：10~10800 秒（默认 60）；成功上报后以 HA 返回为准
+5. 点击「开始定位」
 
-### ⚡ 核心功能
-- 📍 **实时定位**: GPS/网络定位，精确位置上报
-- 🔗 **HA 对接**: 填根地址自动生成 Webhook ID，配合 `ha_loca_device`
-- ⏱️ **间隔同步**: 上报成功后按 HA 返回的 `update_interval` 自动同步
-- 🔄 **数据去重**: 避免重复上报相同位置数据
-- 🔋 **低电量保护**: 电量低于10%时自动暂停上报
-- 🌙 **后台保活**: 开机自启动，服务自动重启；通知仅保活、不频繁刷新
-- 🎨 **透明状态栏**: 支持Android 4.4+透明状态栏
-- 🛡️ **全局异常捕获**: 崩溃自动记录日志并友好提示
-- 🖥️ **多分辨率适配**: 支持不同屏幕尺寸
-- 🔧 **设备优化指导**: 内置各品牌设备优化设置指导
-- 🔒 **SQL注入防护**: 使用参数化查询防止SQL注入
-- 🖱️ **主要操作有 UI 反馈**
+界面预览：[手机](https://haoxiang.eu.org/ui/MOBILE_UI_PREVIEW) | [平板](https://haoxiang.eu.org/ui/TABLET_UI_PREVIEW)
 
-## 🎨 界面预览
+---
 
-> 💡 **快速预览**: [📱 手机端界面](https://haoxiang.eu.org/ui/MOBILE_UI_PREVIEW) | [📟 平板端界面](https://haoxiang.eu.org/ui//TABLET_UI_PREVIEW)
+## 上报规则
 
-### 📱 手机端特性
-- **单面板设计**: 底部TAB切换，界面简洁统一
-- **状态监控**: 实时显示连接状态、定位状态、电池电量、上报次数
-- **配置面板**: HA 上报地址、本地初始间隔、通知开关
-- **运行日志**: 实时显示应用运行状态和上报记录
+| 项 | 值 |
+| -- | -- |
+| GPS 采样 | 稀疏，默认 600s（`Utils.getGpsSampleIntervalSeconds`） |
+| 上报间隔 | 本地初始 10~10800s，默认 60；成功后同步 HA `update_interval` |
+| 低电量 | ≤10% 暂停上报 |
+| 去重 | 位置未变化不重复上报 |
+| 通知 | 前台保活静默通知，不频繁刷新内容 |
+| 地址 | 须公网域名/IP，不能用内网 |
 
-### 📟 平板端特性
-- **大屏优化**: 针对平板设备优化的布局和字体大小
-- **触摸友好**: 更大的按钮和交互区域
-- **信息密度**: 合理的信息密度，充分利用大屏空间
-- **横竖屏适配**: 支持横竖屏切换，保持良好的用户体验
+**JSON**
 
-## 🚀 使用指南
-
-### 首次使用
-1. **安装应用**: 下载并安装APK文件
-2. **授予权限**: 允许定位、网络、自启动等权限
-3. **配置参数**: 填 HA 根地址与本地初始间隔；记下自动生成的 Webhook ID，在 HA 添加 `ha_loca_device`
-4. **启动服务**: 点击"开始定位"按钮启动位置上报
-5. **监控状态**: 切换到监控面板查看运行状态和日志
-
-### 界面操作
-- **📊 监控面板**: 查看连接状态、定位状态、电池电量、上报次数
-- **⚙️ 配置面板**: 设置 HA 上报地址、本地初始间隔、通知开关
-- **📱 底部导航**: 监控和配置面板切换
-- **🛠️ 日志管理**: 点击"🛠️ 日志"查看崩溃日志
-- **🔧 优化设置**: 点击"优化设置"获取设备优化建议
-
-### 日常使用
-- **自动启动**: 应用会自动启动位置上报服务
-- **后台运行**: 服务在后台持续运行，无需手动干预
-- **状态监控**: 通过状态面板查看连接状态和上报次数
-- **日志查看**: 查看详细运行日志，便于问题排查
-- **通知保活**: 通知仅用于前台保活，不频繁刷新内容
-
-### 故障排除
-1. **服务无法启动**: 检查GPS是否开启，权限是否授予
-2. **数据上报失败**: 检查网络与 HA 公网地址；确认 Webhook ID 与 `ha_loca_device` 一致
-3. **后台被杀死**: 检查设备优化设置，确保应用不被限制
-4. **电量消耗过快**: 在 HA 集成中加大上报间隔，或开启低电量保护
-5. **主题兼容性问题**: 应用已内置智能主题适配，如仍有问题请查看崩溃日志
-
-## 📋 权限说明
-
-### 必需权限
-- `ACCESS_FINE_LOCATION`: 精确定位权限
-- `ACCESS_COARSE_LOCATION`: 粗略定位权限
-- `ACCESS_BACKGROUND_LOCATION`: 后台定位权限（Android 10+）
-- `INTERNET`: 网络访问权限
-- `ACCESS_NETWORK_STATE`: 网络状态访问权限
-- `WAKE_LOCK`: 唤醒锁权限
-- `RECEIVE_BOOT_COMPLETED`: 开机自启动权限
-
-### 可选权限
-- `FOREGROUND_SERVICE`: 前台服务权限（Android 8.0+）
-- `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`: 忽略电池优化权限
-- `SYSTEM_ALERT_WINDOW`: 系统悬浮窗权限（华为/荣耀设备）
-- `ACCESS_WIFI_STATE`: WiFi状态访问权限（用于网络定位）
-- `CHANGE_WIFI_STATE`: WiFi状态修改权限
-- `ACCESS_LOCATION_EXTRA_COMMANDS`: 定位扩展命令权限
-- `READ_EXTERNAL_STORAGE`: 外部存储读取权限（用于崩溃日志管理）
-- `WRITE_EXTERNAL_STORAGE`: 外部存储写入权限（用于崩溃日志管理）
-- `READ_PHONE_STATE`: 手机状态读取权限
-- `WRITE_SETTINGS`: 系统设置写入权限
-- `BLUETOOTH`: 蓝牙权限
-- `BLUETOOTH_ADMIN`: 蓝牙管理权限
-
-## 🔒 安全分析
-
-### 已修复的安全问题
-✅ **SQL注入防护**: 所有数据库操作使用参数化查询
-✅ **网络请求安全**: 使用OkHttp库，支持HTTPS，包含超时和重试机制
-✅ **权限管理**: 完善的运行时权限申请机制
-✅ **输入验证**: 对用户输入进行严格验证
-✅ **API级别兼容性**: 修复所有API级别兼容性问题
-
-### 安全建议
-- 🔐 建议使用 HTTPS 的 HA 公网地址
-- 🔐 定期更新应用版本
-- 🔐 在可信网络环境下使用
-- 🔐 定期检查上报数据的准确性
-
-## ⚙️ 配置说明
-
-### 基本配置
-1. **HA 上报地址**: 填 HA 根地址（http/https），App 自动生成 Webhook ID 并拼成完整 `/api/webhook/<id>`
-2. **本地初始间隔**: 10~10800秒，缺省/超范围回退为60；成功上报后以 HA 返回的 `update_interval` 为准
-3. **通知开关**: 前台保活通知（静默、不频繁刷新）
-
-### 数据格式
-
-#### 标准位置上报
-```json
-{
-  "latitude": 37.7749,
-  "longitude": -122.4194,
-  "altitude": 100.5,
-  "gps_accuracy": 5.0,
-  "battery": 75,
-  "speed": 30.0,
-  "bearing": 180.0,
-  "timestamp": 1640995200000,
-  "provider": "gps",
-  "screen_off": false,
-  "power_save_mode": false
-}
-```
-
-#### 立即上报（含标记）
 ```json
 {
   "latitude": 37.7749,
@@ -179,91 +96,78 @@
 }
 ```
 
-HA 成功响应示例：`{"ok":true,"update_interval":60}`
+| 字段 | 类型 | 必需 |
+| ---- | ---- | ---- |
+| `latitude` / `longitude` | number | 是 |
+| `timestamp` | number | 是 |
+| `altitude` / `gps_accuracy` / `battery` / `speed` / `bearing` | number | 否 |
+| `provider` | string | 否 |
+| `screen_off` / `power_save_mode` / `immediate_report` | boolean | 否 |
 
-### 字段说明
+成功响应：`{"ok":true,"update_interval":60}`
 
-| 字段名 | 类型 | 说明 | 是否必需 |
-|--------|------|------|----------|
-| `latitude` | number | 纬度 | ✅ |
-| `longitude` | number | 经度 | ✅ |
-| `altitude` | number | 海拔高度（米） | ⚠️ |
-| `gps_accuracy` | number | GPS精度（米） | ⚠️ |
-| `battery` | number | 电池电量百分比 | ⚠️ |
-| `speed` | number | 移动速度（米/秒） | ⚠️ |
-| `bearing` | number | 方向角度（0-360度） | ⚠️ |
-| `timestamp` | number | 时间戳（毫秒） | ✅ |
-| `provider` | string | 定位提供者（gps/network/passive） | ⚠️ |
-| `screen_off` | boolean | 屏幕是否关闭 | ⚠️ |
-| `power_save_mode` | boolean | 是否处于省电模式 | ⚠️ |
-| `immediate_report` | boolean | 是否为立即上报 | ⚠️ |
+---
 
-**注意**: 只有`latitude`和`longitude`是必需字段，其他字段根据设备能力和系统状态可能为空或缺失。
+## 权限
 
-## 📊 兼容性支持
+| 权限 | 说明 |
+| ---- | ---- |
+| `ACCESS_FINE/COARSE_LOCATION` | 定位 |
+| `ACCESS_BACKGROUND_LOCATION` | 后台定位（Android 10+） |
+| `INTERNET` / `ACCESS_NETWORK_STATE` | 网络 |
+| `WAKE_LOCK` | 唤醒 |
+| `RECEIVE_BOOT_COMPLETED` | 开机自启 |
+| `FOREGROUND_SERVICE` | 前台服务（Android 8+） |
+| `POST_NOTIFICATIONS` | 通知（Android 13+） |
+| `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` | 忽略电池优化 |
+| `SYSTEM_ALERT_WINDOW` | 悬浮窗（华为/荣耀） |
 
-### 🖥️ 屏幕尺寸
-| 设备类型 | 屏幕尺寸 | 分辨率范围 | 界面布局 | 触摸优化 | 状态栏 | 典型设备举例 |
-|---------|---------|-----------|---------|---------|--------|-------------|
-| **小屏手机** | 4.0-4.7英寸 | 480x800-720x1280 | ✅ 紧凑布局 | ✅ 标准尺寸 | ✅ 完全透明 | 小米4 (5.0")、华为P8 (5.2")、三星Galaxy S5 (5.1") |
-| **标准手机** | 5.0-6.0英寸 | 720x1280-1080x1920 | ✅ 单面板设计 | ✅ 标准尺寸 | ✅ 完全透明 | 华为P40 (6.1")、小米12 (6.28")、OPPO Find X3 (6.7") |
-| **大屏手机** | 6.1-6.7英寸 | 1080x1920-1440x3200 | ✅ 单面板设计 | ✅ 标准尺寸 | ✅ 完全透明 | 华为Mate 50 Pro (6.74")、小米13 Ultra (6.73")、vivo X90 Pro+ (6.78") |
-| **小屏平板** | 7.0-8.0英寸 | 1024x768-1200x1920 | ✅ 优化布局 | ✅ 大尺寸按钮 | ✅ 完全透明 | 华为平板M6 (8.4")、小米平板4 (8.0")、三星Galaxy Tab A (8.0") |
-| **标准平板** | 8.5-10.5英寸 | 1200x1920-1600x2560 | ✅ 优化布局 | ✅ 大尺寸按钮 | ✅ 完全透明 | 华为MatePad Pro (10.8")、小米平板5 (11")、OPPO Pad (11") |
-| **大屏平板** | 11.0-12.9英寸 | 1600x2560-2048x2732 | ✅ 大屏适配 | ✅ 超大尺寸按钮 | ✅ 完全透明 | 华为MatePad Pro 12.6"、小米平板6 Pro (11") |
-| **折叠屏** | 展开6.7-8.0英寸 | 1080x1920-2208x1768 | ✅ 自适应布局 | ✅ 智能尺寸 | ✅ 完全透明 | 三星Galaxy Fold (7.6")、华为Mate X (8.0")、小米MIX Fold (8.01") |
-| **车载/大屏** | 10.0-15.0英寸 | 1920x1080-2560x1440 | ✅ 大屏适配 | ✅ 超大尺寸按钮 | ✅ 完全透明 | 车载Android系统、智能大屏设备、Android TV |
+华为 / 小米 / OPPO / vivo / 三星通常需手动开自启动、后台保活、忽略电池优化；App 内「优化设置」有指导。
 
-### 🤖 Android版本
-| 功能 | Android 4.0-4.3 | Android 4.4-4.4W | Android 5.0+ | Android 10+ |
-|------|------------------|-------------------|--------------|-------------|
-| **基础定位** | ✅ 支持 | ✅ 支持 | ✅ 支持 | ✅ 支持 |
-| **后台定位** | ✅ 支持 | ✅ 支持 | ✅ 支持 | ⚠️ 需要权限 |
-| **前台服务** | ❌ 不支持 | ❌ 不支持 | ✅ 支持 | ✅ 支持 |
-| **透明状态栏** | ❌ 不支持 | ⚠️ 半透明 | ✅ 完全透明 | ✅ 完全透明 |
-| **主题兼容** | ✅ 智能适配 | ✅ 智能适配 | ✅ 智能适配 | ✅ 智能适配 |
+---
 
-### 📱 设备品牌
-| 品牌 | 自启动权限 | 后台保活 | 电池优化 | 优化指导 |
-|------|-----------|----------|----------|----------|
-| **华为/荣耀** | ⚠️ 需要设置 | ⚠️ 需要优化 | ⚠️ 需要忽略 | ✅ 内置指导 |
-| **小米/红米** | ⚠️ 需要设置 | ⚠️ 需要优化 | ⚠️ 需要忽略 | ✅ 内置指导 |
-| **OPPO/一加** | ⚠️ 需要设置 | ⚠️ 需要优化 | ⚠️ 需要忽略 | ✅ 内置指导 |
-| **vivo** | ⚠️ 需要设置 | ⚠️ 需要优化 | ⚠️ 需要忽略 | ✅ 内置指导 |
-| **三星** | ⚠️ 需要设置 | ⚠️ 需要优化 | ⚠️ 需要忽略 | ✅ 内置指导 |
+## 兼容性
 
-## 🏠 Home Assistant 集成
+| 能力 | 4.0–4.3 | 4.4 | 5.0+ | 10+ |
+| ---- | ------- | --- | ---- | --- |
+| 基础定位 | ✅ | ✅ | ✅ | ✅ |
+| 后台定位 | ✅ | ✅ | ✅ | 需权限 |
+| 前台服务 | ❌ | ❌ | ✅ | ✅ |
+| 透明状态栏 | ❌ | 半透明 | 全透明 | 全透明 |
 
-> 推荐使用本仓库自带的 `ha_loca_device` 集成（HTTP webhook，一设备一入口）。
+布局：`layout` + `sw400dp` / `sw600dp` / `sw720dp` / `sw800dp` / `sw900dp`
 
-### 方案一：ha_loca_device（推荐）
+---
 
-#### 安装
-1. 将仓库中的 `ha_loca_device` 目录复制到 Home Assistant 的 `custom_components/ha_loca_device`
-2. 或在 HACS → 自定义存储库中添加本仓库，类别选「集成」后下载 `ha_loca_device`
-3. 重启 Home Assistant
+## ha_loca_device（推荐）
 
-#### 配置
-1. App 填 HA 根地址并启动，记下自动生成的 Webhook ID
-2. HA 添加 `ha_loca_device`：设备名、Webhook ID、上报间隔
-3. App 向公网 Webhook 推送；间隔以 HA 配置为准（上报成功后自动同步）
+路径：`ha_loca_device/`。App **主动推送**到 HA 公网 Webhook；一设备一入口。
 
-#### App 对接
-1. 上报地址：`https://your-ha`（App 自动拼 `/api/webhook/<id>`）
-2. 手机只要能上网访问 HA 即可（蜂窝/外网均可）
-3. 通知仅用于保活，不频繁刷新
+**安装**
 
-**示例**:
-- App：`https://ha.example.com` → `https://ha.example.com/api/webhook/<自动id>`
-- HA 间隔：60 秒（可在集成配置中修改）
+1. HACS → 自定义仓库 → 本仓库（Integration）→ 安装 `ha_loca_device`
+2. 或复制到 `config/custom_components/ha_loca_device`
+3. 重启 HA → 添加集成：设备名、Webhook ID、上报间隔（10~10800，默认 60）
 
-**JSON 字段**: `latitude` / `longitude` 必填；可选 `gps_accuracy`、`battery`、`altitude`、`speed`、`bearing`、`timestamp`、`provider`、`screen_off`、`power_save_mode`、`immediate_report`
+**对接**
 
-> 上报地址须为公网域名或公网 IP，不能使用内网 IP。
+| 项 | 说明 |
+| -- | ---- |
+| App 地址 | `https://your-ha` → 自动拼 `/api/webhook/<id>` |
+| HA | 填同一 Webhook ID + 间隔 |
+| 实体 | `device_tracker` + 相关 sensor |
 
-详见 [`ha_loca_device/README.md`](./ha_loca_device/README.md)。
+调试：
 
-### 方案二：原生 Webhook 自动化（备选）
+```bash
+curl -X POST "https://你的HA/api/webhook/<id>" \
+  -H "Content-Type: application/json" \
+  -d '{"latitude":31.23,"longitude":121.47,"battery":80,"gps_accuracy":10}'
+```
+
+明细见 [`ha_loca_device/README.md`](./ha_loca_device/README.md)。
+
+### 备选：原生 Webhook 自动化
 
 ```yaml
 automation:
@@ -281,340 +185,69 @@ automation:
           battery: "{{ trigger.json.battery }}"
 ```
 
-### 方案三：ha_icloud_cn（Apple 设备，可选）
+---
 
-大陆 iCloud（`icloud.com.cn`）查找设备位置/电量，与本 App 无关。将 `ha_icloud_cn` 复制到 `custom_components` 后重启 HA。详见 [`ha_icloud_cn/README.md`](./ha_icloud_cn/README.md)。
+## 打包
 
-### 开发环境
-- Android Studio 4.0+
-- Android SDK API 14+
-- Gradle 6.0+
-
-### 代码规范
-- 遵循Android开发规范
-- 添加适当的注释
-- 进行充分的测试
-
-## 📦 打包和安装
-
-### 🔧 打包方式
-
-#### 使用打包脚本 (推荐)
 ```bash
-# Linux/Mac
-chmod +x build_scripts.sh
-./build_scripts.sh
+# 推荐
+./build_scripts.sh          # Linux/Mac
+build_scripts.bat           # Windows
 
-# Windows
-build_scripts.bat
-```
-
-#### 手动打包
-```bash
-# 打包Release版本
+# 或
 ./gradlew assembleRelease
-
-# 打包Debug版本  
 ./gradlew assembleDebug
 ```
 
-**重要**: 手动打包前需要配置`local.properties`文件：
+手动打包前：`cp local.properties.example local.properties`，填 SDK 路径与签名。
 
-1. **复制配置模板**:
-```bash
-cp local.properties.example local.properties
-```
+| 版本 | 包名 | 说明 |
+| ---- | ---- | ---- |
+| Release | `com.hx.locationtracker` | 签名、混淆，正式用 |
+| Debug | `com.hx.locationtracker.debug` | 可同机安装调试 |
 
-2. **编辑local.properties文件**:
-```properties
-# SDK路径
-sdk.dir=你的本地安卓SDK路径
-
-# 签名配置（Release版本必需）
-KEYSTORE_PASSWORD=你的签名密码
-KEY_ALIAS=你的key别名
-KEY_PASSWORD=你的key密码
-
-# 服务端配置（可选，有默认值）
-CONFIG_URL=你的配置服务器地址
-HEARTBEAT_URL=你的心跳地址
-WEBHOOK_URL=你的webhook地址
-```
-
-3. **配置说明**:
-- **签名配置**: Release版本打包必需，用于APK签名
-- **服务端配置**: 可选，如果不配置会使用默认值
-- **默认值**: 
-  - `CONFIG_URL`: `https://www.zhangsan.com/locationtracker/api/config`
-  - `HEARTBEAT_URL`: `https://www.zhangsan.com/locationtracker/api/config/heartbeat`
-  - `WEBHOOK_URL`: `https://www.zhangsan.com/api/webhook/db72ebc1627e52685ca64cdb380`
-
-### 版本说明
-
-#### Release版本
-- **包名**: `com.hx.locationtracker`
-- **特点**: 已签名，可直接发布
-- **优化**: 代码混淆、资源压缩、性能优化
-- **用途**: 正式发布版本
-
-#### Debug版本  
-- **包名**: `com.hx.locationtracker.debug`
-- **特点**: 未签名，用于测试
-- **优化**: 保留调试信息，便于问题排查
-- **用途**: 开发测试版本
-
-#### 同时安装
-- 两个版本可以同时安装，包名不同
-- Release版本用于正式使用
-- Debug版本用于测试和调试
-
-### 📥 安装方式
-
-#### 方式一: 直接安装
-1. 下载release中的APK文件
-2. 在Android设备上安装
-3. 授予必要权限
-4. 配置 HA 上报地址和本地初始间隔
-
-#### 方式二: 源码编译
-1. 克隆项目代码
-2. 使用Android Studio打开项目
-3. 编译生成APK
-4. 安装到设备
-
-## 🚀 未来开发计划
-
-### 📱 设备端功能增强
-
-#### 🔄 服务端配置推送 (已具备基础架构)
-- **远程配置更新**: 基于现有的ConfigSyncService，实现服务端远程推送配置信息到设备APP
-- **实时配置同步**: 设备自动接收并应用服务端下发的配置
-- **配置版本管理**: 支持配置版本控制和回滚机制
-- **增量配置更新**: 只推送变更的配置项，减少数据传输
-
-#### 💓 心跳监控系统 (已具备基础架构)
-- **设备在线状态**: 基于现有的HEARTBEAT_URL，通过心跳包实时监控设备在线/离线状态
-- **网络状态检测**: 自动检测网络连接质量和稳定性
-- **离线时间统计**: 记录设备离线时长和频率
-- **异常状态告警**: 设备异常离线时自动发送告警
-
-#### 📊 状态反馈机制
-- **设备状态上报**: 定期上报设备运行状态和健康信息
-- **配置应用反馈**: 反馈配置接收和应用状态
-- **错误日志上传**: 自动上传错误日志到服务端
-- **性能指标收集**: 收集设备性能指标用于优化
-
-### 🌐 服务端功能规划
-
-#### 🔧 设备管理平台
-- **设备注册管理**: 设备注册、认证和权限管理
-- **分组管理**: 支持设备分组和批量操作
-- **配置模板**: 预定义配置模板，支持批量配置下发
-- **设备监控**: 实时监控所有设备状态和位置信息
-
-#### 📈 数据统计分析
-- **设备活跃度统计**: 统计设备在线时长和活跃度
-- **配置应用统计**: 统计配置推送成功率和应用情况
-- **性能分析**: 分析设备性能指标和优化建议
-- **使用趋势**: 分析设备使用趋势和模式
-
-#### 🔔 告警通知系统
-- **设备离线告警**: 设备异常离线时发送通知
-- **配置推送失败**: 配置推送失败时发送告警
-- **异常行为检测**: 检测设备异常行为并告警
-- **系统状态监控**: 监控系统整体运行状态
-
-### 📋 技术架构设计
-
-#### 🔐 安全机制
-- **设备认证**: 基于Token的设备身份认证
-- **数据加密**: 所有通信数据使用TLS加密
-- **权限控制**: 细粒度的设备权限管理
-- **审计日志**: 完整的操作审计日志记录
-
-#### ⚡ 性能优化
-- **连接池管理**: 高效的连接池管理机制
-- **消息队列**: 可靠的消息传递和处理
-- **缓存机制**: 智能缓存减少重复请求
-- **负载均衡**: 支持多服务器负载均衡
-
-#### 🔄 协议设计
-- **心跳协议**: 轻量级心跳包协议设计
-- **配置推送协议**: 标准化的配置推送协议
-- **状态反馈协议**: 设备状态反馈协议规范
-- **错误处理协议**: 统一的错误处理和重试机制
-
-### 📅 开发时间线
-
-#### 第一阶段：基础功能 (1-2个月)
-- [ ] 完善ConfigSyncService的启动和调用机制
-- [ ] 实现服务端设备状态监控
-- [ ] 完善配置推送功能
-- [ ] 实现设备认证机制
-
-#### 第二阶段：管理平台 (2-3个月)
-- [ ] Web管理界面开发
-- [ ] 设备分组管理功能
-- [ ] 配置模板系统
-- [ ] 实时监控面板
-
-#### 第三阶段：高级功能 (3-4个月)
-- [ ] 数据统计分析
-- [ ] 告警通知系统
-- [ ] 性能优化
-- [ ] 安全加固
-
-### 🎯 功能特性对比
-
-| 功能模块 | 当前版本 | 未来版本 |
-|---------|---------|---------|
-| **配置管理** | 本地配置 | 远程推送配置 |
-| **设备监控** | 基础状态 | 实时心跳监控 |
-| **数据统计** | 基础日志 | 详细统计分析 |
-| **告警通知** | 本地通知 | 远程告警系统 |
-| **权限管理** | 基础权限 | 细粒度权限 |
-| **安全机制** | 基础加密 | 企业级安全 |
-
-### 💡 开发原则
-
-#### ✅ 重点开发
-- **轻量级设计**: 保持应用轻量化，不影响设备性能
-- **开源友好**: 所有功能保持开源，便于社区贡献
-- **用户导向**: 优先开发用户最需要的功能
-- **渐进式开发**: 分阶段开发，确保每个阶段都有可用版本
-
-#### 🔧 技术基础
-- **现有架构**: 基于现有的ConfigSyncService和心跳机制
-- **兼容性**: 保持对现有功能的完全兼容
-- **可扩展性**: 设计支持未来功能扩展的架构
-- **稳定性**: 确保新功能不影响现有功能的稳定性
-
-## 🤝 贡献指南
-
-欢迎提交Issue和Pull Request来改进项目！
-
-## 📄 许可证
-
-本项目采用MIT许可证，详见LICENSE文件。
-
-## 📞 联系方式
-
-如有问题或建议，请通过以下方式联系：
-- 提交GitHub Issue
-- 发送邮件至项目维护者
+可选 `local.properties`：`CONFIG_URL` / `HEARTBEAT_URL` / `WEBHOOK_URL`（有默认值）。
 
 ---
 
-**注意**: 使用本应用时请遵守当地法律法规，确保在合法范围内使用位置服务。
+## 更新日志
 
-## 📝 更新日志
+### 对接 ha_loca_device
 
-### 当前改动（对接 ha_loca_device）
 - App 填 HA 根地址，自动生成 Webhook ID 并拼 `/api/webhook/<id>`
-- 上报间隔以 HA `ha_loca_device` 为准，响应 `update_interval` 自动同步
-- 通知改为保活静默通知，不频繁刷新电量/坐标
+- 上报间隔以 HA 为准，响应 `update_interval` 自动同步
+- 通知改为保活静默，不频繁刷新
 - 定位改为稀疏采样 + 定时上报，息屏不再重绑 GPS
-- 新增仓库集成：`ha_loca_device`（Android 推送）、`ha_icloud_cn`（大陆 iCloud）
+- 新增仓库集成 `ha_loca_device`
 
 ### v2.1.6（2024-07-19）
-- 定位上报策略优化：白天无论静止/运动/息屏都持续上报，夜间静止暂停上报
-- 静止/运动判定日志优化，distance、speed、staticCount 实时可查
-- WorkManager 定时任务频繁重启问题修复，静止/运动判定与日志一致
-- APP前后台切换时页面状态自动刷新，onResume 主动拉取服务状态
-- 权限日志只在首次进入或权限变更时写入，避免刷屏
-- 首次进入APP时所有引导弹框关闭后再自动申请权限，体验更佳
-- 配置弹框点击“去填写”时弹框立即消失，先关闭弹框再切换tab
-- 权限弹框、配置弹框、设备优化建议弹框顺序及交互优化
-- 通知内容优化：位置未获取时显示“定位中...”，电量未获取时显示“获取中”
-- 支持静默通知，配置面板关闭通知时 Android 8.0+ 不打扰用户，开启时立即切换为正常通知
-- 通知内容根据电量/经纬度状态智能显示“获取中”“定位中...”或具体数值
-- 其他细节体验优化
+
+- 白天持续上报；夜间静止暂停
+- 静止/运动判定与 WorkManager 重启问题修复
+- 前后台切换时刷新状态；权限日志去刷屏
+- 引导弹框顺序优化；静默通知开关
 
 ### v2.1.5
-- 🧹 **代码清理**: 移除所有MQTT相关代码和配置
-- 🔧 **配置优化**: 简化构建配置，移除无用依赖
-- 📝 **文档更新**: 更新版本号和功能说明
-- 🛠️ **ProGuard优化**: 更新包名引用规则
-- 全面优化 UI 细节，提升用户体验：
-  - Webhook/周期输入框增加详细提示（hint），说明格式和范围
-  - 按钮防抖处理，防止多次点击"开始"导致重复启动
-  - 服务启动/停止、上报成功/失败等操作有明显 UI 反馈
-  - 多分辨率适配（sw400dp、sw600dp、sw720dp、sw800dp、sw900dp），所有优化同步到各屏幕布局
-- 全局异常捕获，防止App崩溃并本地保存崩溃日志，异常时友好提示用户
-- Webhook URL、上报周期等输入校验更严格，防止无效配置
-- 其它细节体验优化和Bug修复
+
+- 移除 MQTT；UI / 输入校验 / 防抖 / 崩溃日志
 
 ### v2.1.4
-- ✨ **透明状态栏功能**: 实现沉浸式状态栏效果，标题上方的状态栏变为透明
-- ✨ **智能兼容性**: 不同Android版本自动使用对应的透明方案
-  - Android 5.0+ (API 21+): 完全透明状态栏
-  - Android 4.4-4.4W (API 19-20): 半透明状态栏
-  - Android 4.0-4.3 (API 14-18): 自动忽略，保持原样
-- 🛠️ **技术实现**: 布局适配和代码实现，确保向后兼容
-- 🛠️ **异常处理**: 透明状态栏设置失败时不影响应用正常运行
+
+- 透明状态栏（5.0+ 全透明，4.4 半透明）
 
 ### v2.1.3
-- 🚨 **重要修复与优化**: 彻底修复主题兼容性崩溃问题，确保应用在所有设备上稳定运行
-- 🛠️ **智能主题设置机制**: 根据系统状态（省电模式、夜间模式、高对比度等）自动选择最优AppCompat主题
-- 🛠️ **多重防护机制**: 在Application、Activity的attachBaseContext和onCreate阶段都设置兼容主题，确保100%不崩溃
-- 🛠️ **主题验证机制**: 每次设置主题后都验证是否生效，失败时自动兜底
-- ✨ **崩溃日志管理优化**: 修复崩溃日志清理后对话框信息不更新的问题，提供立即清理功能
-- ✨ **屏幕状态自适应定位间隔**: 屏幕熄灭时自动缩短定位间隔，提高被系统唤醒概率
-- ✨ **数据去重机制**: 只有位置数据发生变化时才会上报，降低无效上报
-- ✨ **低电量智能保护**: 电量低于10%时暂停位置上报，电量恢复后自动重启
-- ✨ **增强WakeLock机制和保活策略**: 使用更强的WakeLock策略确保后台运行
-- ✨ **服务自动重启机制**: 被系统杀死后通过广播机制自动重启
-- ✨ **开机自启动功能**: 系统启动完成后自动启动位置上报服务
-- ✨ **保活定时器和状态检查**: 随机60秒到配置上报间隔之间的保活检查机制
-- ✨ **电池状态监控和电量恢复逻辑**: 实时监控电池电量和省电模式状态
-- 🔧 **修复API级别兼容性问题**: 确保在所有Android版本上稳定运行
-- 🔧 **改进网络请求和错误处理**: 更完善的异常捕获和错误恢复机制
-- 🔧 **优化状态广播和日志系统**: 改进的状态更新和日志广播机制
-- 🔒 **增强权限检查和输入验证**: 更严格的权限检查和输入验证
-- 📱 **改进用户体验和界面显示**: 优化用户界面和交互体验
 
-### v2.1.2
-- 🚨 **重要修复**: 修复屏幕状态切换时上报间隔自动调整的问题
-- ✨ **数据去重机制**: 只有位置数据发生变化时才会上报
-- 🔧 **API兼容性**: 修复API级别兼容性问题
-- 🔧 **网络优化**: 改进网络请求和错误处理
-- 🔧 **日志系统**: 优化状态广播和日志系统
-- 🔒 **安全增强**: 增强权限检查和输入验证
-- 📱 **界面优化**: 改进用户体验和界面显示
+- 主题兼容崩溃修复；数据去重；低电量保护；开机自启与保活
 
-### v2.1.1
-- ✨ 新增低电量智能保护功能
-- ✨ 增强WakeLock机制和保活策略
-- ✨ 改进服务自动重启机制
-- ✨ 完善开机自启动功能
-- ✨ 新增保活定时器和状态检查
-- ✨ 优化电池状态监控和电量恢复逻辑
-- 🔧 修复API级别兼容性问题
-- 🔧 改进网络请求和错误处理
-- 🔧 优化状态广播和日志系统
-- 🔒 增强权限检查和输入验证
-- 📱 改进用户体验和界面显示
-- ⚠️ **注意**: 此版本存在屏幕状态切换时上报间隔自动调整的问题，已在v2.1.2中修复
+### v2.0.0 / v1.0.0
 
-### v2.0.0
-- ✨ 新增低电量保护功能
-- ✨ 增强WakeLock机制
-- ✨ 优化屏幕状态监控
-- ✨ 改进网络重试机制
-- ✨ 完善日志系统
-- 🔒 修复SQL注入漏洞
-- 🔒 增强输入验证
-- 🔒 改进错误处理
+- 低电量 / WakeLock / SQL 注入修复；初始 HTTP Webhook 上报
 
-### v1.0.0
-- 🎉 初始版本发布
-- 📍 基础位置上报功能
-- 🌐 HTTP Webhook支持
-- 📱 Android 4.0+兼容
+## 已知问题
 
-## ⚠️ 已知问题 / TODO
-- 部分输入或操作错误（如配置面板输入错误）仅在日志区提示，未全部弹出 Toast 友好提示，后续可完善。
-- 暂未支持夜间模式/高对比度/多主题自动适配，后续可根据需求完善。
+- 部分输入错误仅写日志区，未全部 Toast
+- 暂无完整夜间/高对比度多主题自动适配
 
+## 许可证
 
-
+MIT，见 LICENSE。
