@@ -361,7 +361,7 @@ public class ltmService extends Service {
                 return;
             }
             if (time < 10 || time > 10800) {
-                time = 60;
+                time = 3600;
             }
             
             // 初始化定位监听器
@@ -980,8 +980,8 @@ public class ltmService extends Service {
     public static void setTimeInterval(int timeValue) {
         // 验证时间间隔的有效性
         if (timeValue < 10 || timeValue > 10800) {
-            Log.w("ltmService", "setTimeInterval: 无效的时间间隔 " + timeValue + "，使用默认值60");
-            timeValue = 60; // 使用默认值
+            Log.w("ltmService", "setTimeInterval: 无效的时间间隔 " + timeValue + "，使用默认值3600");
+            timeValue = 3600;
         }
         // 设置到mode变量，服务会在下次检查时同步到time变量
         mode = timeValue;

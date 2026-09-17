@@ -21,7 +21,7 @@ MainActivity saves config
 
 ltmService
   sparse GPS/Network sampling (default 600s)
-  → timed reportRunnable (local interval 10~10800s, default 60)
+  → timed reportRunnable (local interval 10~10800s, default 3600)
   → build JSON POST → HA Webhook
   → on success, sync local interval from update_interval
   → pause reporting when battery ≤10%
@@ -59,10 +59,28 @@ HA ha_loca_device
 1. Install the [APK](./app/build/outputs/apk/release/) or build from source
 2. Grant location / network / background permissions
 3. In config, enter HA base URL (e.g. `https://ha.example.com`); note the auto-generated Webhook ID
-4. Local initial interval: 10~10800s (default 60); after a successful report, HA response wins
+4. Local initial interval: 10~10800s (default 3600); after a successful report, HA response wins
 5. Tap Start Location
 
 UI preview: [Phone](https://haoxiang.eu.org/ui/MOBILE_UI_PREVIEW) | [Tablet](https://haoxiang.eu.org/ui/TABLET_UI_PREVIEW)
+
+---
+
+## Configuration
+
+### App
+
+| Item | Description |
+| ---- | ----------- |
+| HA base URL | e.g. `https://ha.example.com` |
+
+### HA integration `ha_loca_device`
+
+| Item | Description |
+| ---- | ----------- |
+| Device name | display name in HA |
+| Webhook ID | must match the App |
+| Report interval | 10~10800s, default 3600 |
 
 ---
 
@@ -71,7 +89,7 @@ UI preview: [Phone](https://haoxiang.eu.org/ui/MOBILE_UI_PREVIEW) | [Tablet](htt
 | Item | Value |
 | ---- | ----- |
 | GPS sampling | sparse, default 600s (`Utils.getGpsSampleIntervalSeconds`) |
-| Report interval | local 10~10800s, default 60; then sync HA `update_interval` |
+| Report interval | local 10~10800s, default 3600; then sync HA `update_interval` |
 | Low battery | pause when ≤10% |
 | Dedup | skip if location unchanged |
 | Notification | quiet foreground keep-alive; no frequent content refresh |
@@ -104,7 +122,7 @@ UI preview: [Phone](https://haoxiang.eu.org/ui/MOBILE_UI_PREVIEW) | [Tablet](htt
 | `provider` | string | no |
 | `screen_off` / `power_save_mode` / `immediate_report` | boolean | no |
 
-Success response: `{"ok":true,"update_interval":60}`
+Success response: `{"ok":true,"update_interval":3600}`
 
 ---
 
@@ -147,7 +165,7 @@ Path: `ha_loca_device/`. App **pushes** to a public HA webhook; one device, one 
 
 1. HACS → Custom repositories → this repo (Integration) → install `ha_loca_device`
 2. Or copy to `config/custom_components/ha_loca_device`
-3. Restart HA → Add integration: device name, Webhook ID, interval (10~10800, default 60)
+3. Restart HA → Add integration: device name, Webhook ID, interval (10~10800, default 3600)
 
 **Wire-up**
 

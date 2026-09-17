@@ -21,7 +21,7 @@ MainActivity 保存配置
 
 ltmService
   GPS/Network 稀疏采样（默认 600s）
-  → 定时 reportRunnable（本地初始间隔 10~10800s，默认 60）
+  → 定时 reportRunnable（本地初始间隔 10~10800s，默认 3600）
   → 组装 JSON POST → HA Webhook
   → 成功响应 update_interval → 同步本地间隔
   → 电量 ≤10% 暂停上报
@@ -59,10 +59,28 @@ HA ha_loca_device
 1. 安装 [APK](./app/build/outputs/apk/release/) 或自行编译
 2. 授予定位 / 网络 / 后台相关权限
 3. 配置面板填 HA 根地址（如 `https://ha.example.com`），记下自动生成的 Webhook ID
-4. 本地初始间隔：10~10800 秒（默认 60）；成功上报后以 HA 返回为准
+4. 本地初始间隔：10~10800 秒（默认 3600）；成功上报后以 HA 返回为准
 5. 点击「开始定位」
 
 界面预览：[手机](https://haoxiang.eu.org/ui/MOBILE_UI_PREVIEW) | [平板](https://haoxiang.eu.org/ui/TABLET_UI_PREVIEW)
+
+---
+
+## 配置项
+
+### 手机端
+
+| 项 | 说明 |
+| -- | -- |
+| HA 根地址 | 如 `https://ha.example.com` |
+
+### HA 插件 `ha_loca_device`
+
+| 项 | 说明 |
+| -- | -- |
+| 设备名 | 集成显示名 |
+| Webhook ID | 与 App 同一 ID |
+| 上报间隔 | 10~10800 秒，默认 3600 |
 
 ---
 
@@ -71,7 +89,7 @@ HA ha_loca_device
 | 项 | 值 |
 | -- | -- |
 | GPS 采样 | 稀疏，默认 600s（`Utils.getGpsSampleIntervalSeconds`） |
-| 上报间隔 | 本地初始 10~10800s，默认 60；成功后同步 HA `update_interval` |
+| 上报间隔 | 本地初始 10~10800s，默认 3600；成功后同步 HA `update_interval` |
 | 低电量 | ≤10% 暂停上报 |
 | 去重 | 位置未变化不重复上报 |
 | 通知 | 前台保活静默通知，不频繁刷新内容 |
@@ -104,7 +122,7 @@ HA ha_loca_device
 | `provider` | string | 否 |
 | `screen_off` / `power_save_mode` / `immediate_report` | boolean | 否 |
 
-成功响应：`{"ok":true,"update_interval":60}`
+成功响应：`{"ok":true,"update_interval":3600}`
 
 ---
 
@@ -147,7 +165,7 @@ HA ha_loca_device
 
 1. HACS → 自定义仓库 → 本仓库（Integration）→ 安装 `ha_loca_device`
 2. 或复制到 `config/custom_components/ha_loca_device`
-3. 重启 HA → 添加集成：设备名、Webhook ID、上报间隔（10~10800，默认 60）
+3. 重启 HA → 添加集成：设备名、Webhook ID、上报间隔（10~10800，默认 3600）
 
 **对接**
 

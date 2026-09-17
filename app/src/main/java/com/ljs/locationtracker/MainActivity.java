@@ -505,7 +505,7 @@ public class MainActivity extends AppCompatActivity {
         if(cursor.getCount() == 0) {
                 Log.d(TAG, "数据库为空，插入默认配置");
             String sql = "INSERT INTO " + Contant.TABLENAME + "(url, time, notification_enable) VALUES(?, ?, ?)";
-            db.execSQL(sql, new Object[]{BuildConfig.WEBHOOK_URL, 60, 0});
+            db.execSQL(sql, new Object[]{BuildConfig.WEBHOOK_URL, 3600, 0});
             cursor = db.rawQuery("select * from " + Contant.TABLENAME, null);
                 Log.d(TAG, "插入默认配置后记录数: " + cursor.getCount());
         }
@@ -822,7 +822,7 @@ public class MainActivity extends AppCompatActivity {
                 String webhookInput = txtWebhookUrl.getText().toString().trim();
                 String timeStr = txtTime.getText().toString().trim();
                 if (timeStr.equals("")) {
-                    timeStr = "60";
+                    timeStr = "3600";
                     if (txtTime != null) {
                         txtTime.setText(timeStr);
                     }
@@ -847,10 +847,10 @@ public class MainActivity extends AppCompatActivity {
                 try {
                     time = Integer.parseInt(timeStr);
                     if (time < 10 || time > 10800) {
-                        time = 60;
+                        time = 3600;
                     }
                 } catch (NumberFormatException e) {
-                    time = 60;
+                    time = 3600;
                 }
             
             logAdapter.addLog("配置验证通过", "SUCCESS");
@@ -1109,7 +1109,7 @@ public class MainActivity extends AppCompatActivity {
             String webhookInput = txtWebhookUrl.getText().toString().trim();
             String timeStr = txtTime.getText().toString().trim();
             if (timeStr.equals("")) {
-                timeStr = "60";
+                timeStr = "3600";
             }
             if (webhookInput.equals("") || (!webhookInput.startsWith("http://") && !webhookInput.startsWith("https://"))) {
                 logAdapter.addLog("配置验证失败：请填写有效的 HA 地址", "ERROR");
@@ -1125,10 +1125,10 @@ public class MainActivity extends AppCompatActivity {
             try {
                 time = Integer.parseInt(timeStr);
                 if (time < 10 || time > 10800) {
-                    time = 60;
+                    time = 3600;
                 }
             } catch (NumberFormatException e) {
-                time = 60;
+                time = 3600;
             }
             
             logAdapter.addLog("配置验证通过，开始自动启动定位服务", "SUCCESS");

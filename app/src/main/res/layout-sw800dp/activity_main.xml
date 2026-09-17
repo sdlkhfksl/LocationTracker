@@ -32,7 +32,7 @@
         android:layout_weight="1"
         android:padding="8dp">
 
-        <!-- 状态监控面板 -->
+        <!-- 状态监控面�?-->
         <ScrollView
             android:id="@+id/status_panel"
             android:layout_width="match_parent"
@@ -43,7 +43,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
-                <!-- 实时状态 -->
+                <!-- 实时状�?-->
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -61,7 +61,7 @@
                     android:alignmentMode="alignMargins"
                     android:useDefaultMargins="true">
 
-                    <!-- 网络状态 -->
+                    <!-- 网络状�?-->
                     <LinearLayout
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
@@ -91,7 +91,7 @@
 
                     </LinearLayout>
 
-                    <!-- 定位状态 -->
+                    <!-- 定位状�?-->
                     <LinearLayout
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
@@ -205,7 +205,7 @@
                         android:id="@+id/btn_crash_logs"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="🛠️ 日志"
+                        android:text="🛠�?日志"
                         android:textColor="@color/white"
                         android:textSize="12sp"
                         android:background="@drawable/start_button_background"
@@ -250,7 +250,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
-                <!-- Webhook URL 和 更新周期 一行显示 -->
+                <!-- Webhook URL �?更新周期 一行显�?-->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -310,8 +310,8 @@
                             android:id="@+id/txtTime"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:hint="60"
-                            android:text="60"
+                            android:hint="3600"
+                            android:text="3600"
                             android:inputType="number"
                             android:textColor="@color/text_primary"
                             android:textColorHint="@color/text_disabled"
@@ -323,7 +323,7 @@
 
                 </LinearLayout>
 
-                <!-- 开始定位按钮 -->
+                <!-- 开始定位按�?-->
                 <Button
                     android:id="@+id/btnStart"
                     android:layout_width="match_parent"
@@ -337,7 +337,7 @@
                     android:layout_marginTop="20dp"
                     android:layout_marginBottom="15dp" />
 
-                <!-- 通知开关 -->
+                <!-- 通知开�?-->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -387,7 +387,7 @@
 
     </FrameLayout>
 
-    <!-- 底部TAB栏 -->
+    <!-- 底部TAB�?-->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
